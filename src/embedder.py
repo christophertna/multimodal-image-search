@@ -166,7 +166,6 @@ class CLIPEmbedder:
         # torch.nn.functional.normalize works along a given dimension.
         # For a 1D vector, dim=0 is the only dimension. For batched tensors
         # (2D), you would use dim=1 to normalize each row independently.
-        # YOUR TASK: Import torch.nn.functional and call normalize here.
 
         #   - `torch.nn.functional` (often aliased as `F`) contains stateless
         #     math ops like normalize, relu, softmax — no learnable parameters
