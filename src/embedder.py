@@ -4,7 +4,7 @@ embedder.py - CLIP model wrapper for generating image and text embeddings.
 Architecture note:
     CLIP (Contrastive Language-Image Pretraining) is a dual-encoder model.
 
-    It maps both images and text into a *shared* vector space, meaning a text
+    It maps both images and text into a SHARED vector space, meaning a text
     query like "a dog on a beach" and a matching photo will produce vectors
     that are geometrically close. This is what makes semantic search across
     modalities possible.
@@ -13,7 +13,7 @@ Architecture note:
 
     It only owns ONE responsibility: raw input → normalized embedding vector.
 
-    The indexer.py module will own persistence and retrieval.
+    The indexer.py will own persistence and retrieval.
 """
 
 import torch
@@ -21,9 +21,7 @@ from PIL import Image
 from transformers import CLIPProcessor, CLIPModel
 
 
-# ---------------------------------------------------------------------------
 # Device selection
-# ---------------------------------------------------------------------------
 
 def get_device() -> torch.device:
     """
@@ -31,10 +29,11 @@ def get_device() -> torch.device:
 
     Priority: CUDA (NVIDIA GPU) > MPS (Apple Silicon) > CPU.
     """
-    # HINT: torch.cuda.is_available() returns True if your NVIDIA drivers
-    # and CUDA toolkit are correctly installed. If this returns False on your
-    # machine, you may need to reinstall PyTorch with CUDA support:
+    # torch.cuda.is_available() returns True if the NVIDIA drivers and CUDA toolkit are correctly installed on the setup. 
+    # If it returns False, may need to reinstall PyTorch with CUDA support:
+
     #   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
     if torch.cuda.is_available():
         return torch.device("cuda")
     elif torch.backends.mps.is_available(): # for Mac
@@ -43,9 +42,7 @@ def get_device() -> torch.device:
         return torch.device("cpu")
 
 
-# ---------------------------------------------------------------------------
 # Embedder class
-# ---------------------------------------------------------------------------
 
 class CLIPEmbedder:
     """
@@ -56,36 +53,35 @@ class CLIPEmbedder:
     Both return L2-normalized vectors in the same shared embedding space,
     ready to be compared via cosine similarity (dot product of unit vectors).
     """
-    # An L2 normalized vector (aka unit vector) is a vector whose elements 
-    # have been scaled so that its overall magnitude or "length" is exactly 1. 
+    # An L2 normalized vector (aka unit vector) is a vector whose elements have been scaled so that its overall magnitude or "length" is exactly 1. 
+    # Scaling is based on the L2 norm (Euclidean distance), which measures the SLD from the vector's origin.
 
-    # This scaling is based on the L2 norm (Euclidean distance), which measures the straight-line distance from the vector's origin
+    # Need "length" of vectors to be all squished to 1 to simplify/optimize COSINE SIMILARITY (during the semantic search/comparing)
 
+    # Recall cosine similarity formula, where (A ⋅ B) / ||A|| * ||B||, so dot product of both vectors divided by product of the mangitude of both.
+    # With the magnitude both being 1, cosine similarity essentially just becomes the original numertor operation, the dot product of both vectors.
 
-    MODEL_ID = "openai/clip-vit-base-patch32"
+    MODEL_ID = "openai/clip-vit-base-patch32" # free openai pretrained CLIP model
 
     def __init__(self):
-        self.device = get_device()
-        print(f"[CLIPEmbedder] Using device: {self.device}")
+        self.device = get_device() # run torch.device to use GPU instead (if any)
+        print(f"[CLIPEmbedder] Using device: {self.device}") # show what device will be used
 
-        # HINT: CLIPProcessor bundles two sub-processors:
-        #   - A tokenizer for text (converts words → token IDs)
-        #   - An image processor (resizes, normalizes pixel values)
-        # You don't need to configure them separately.
-        self.processor = CLIPProcessor.from_pretrained(self.MODEL_ID)
+        # CLIPProcessor bundles two sub-processors:
+        #   - Tokenizer for text (words → token IDs)
+        #   - Image processor (resizes & normalizes pixel values)
+        self.processor = CLIPProcessor.from_pretrained(self.MODEL_ID) # configured together
 
-        # HINT: .to(self.device) moves the model's weights from CPU RAM onto
-        # your GPU's VRAM. All input tensors must also be on the same device
-        # before you run a forward pass — that's handled below.
-        self.model = CLIPModel.from_pretrained(self.MODEL_ID).to(self.device)
+        # All input tensors must be on the same device before you run a forward pass, so:
+        self.model = CLIPModel.from_pretrained(self.MODEL_ID).to(self.device) # move model weights from CPU RAM to GPU VRAM (if any)
 
-        # Freeze weights: we are using CLIP for inference only, not fine-tuning.
-        # This disables gradient tracking, saving memory and speeding up inference.
-        self.model.eval()
+        self.model.eval() # using model for predicting/inference, not training, so we "freeze"/"lock" the weights (also optimizes memory)
 
-    # -----------------------------------------------------------------------
+        # in short, CLIPProcessor handles the input, like the text query and the image conversion and 
+        # the CLIPModel handles the actual calculation to convert the inputs into tensors
+
+
     # Text embedding
-    # -----------------------------------------------------------------------
 
     def embed_text(self, text: str) -> torch.Tensor:
         """
