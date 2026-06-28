@@ -14,8 +14,23 @@ A local-first, high-performance semantic search engine for images using CLIP and
     - Implemented `src/indexer.py` to batch-process images
     - Integrated ChromaDB for high-speed local similarity search
 -  **Step 4: Search Interface**
-    - Build search logic.
-    - Create Streamlit UI for user interaction.
+    - Build search logic
+    - Create Streamlit UI for user interaction
+
+
+## Project Structure
+my_project/
+├── .venv/                # Virtual environment
+├── data/                 # Your image collection (outside src)
+├── src/                  # Core logic (importable packages)
+│   ├── __init__.py
+│   ├── embedder.py
+│   └── indexer.py
+├── app.py                # Streamlit UI entry point
+├── main.py               # CLI entry point (indexing/searching)
+├── requirements.txt      # Project dependencies
+└── README.md
+
 
 ## Current Status
 Finished **Step 3**, now onto main.py (combine embedder + indexer) and later on app.py (Step 4)
