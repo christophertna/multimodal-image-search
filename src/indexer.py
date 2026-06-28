@@ -315,7 +315,7 @@ class VectorIndexer:
         metadatas  = results["metadatas"][0]
 
         # Zip ids, distances, and metadatas together into a list of
-        # dicts with keys: "id", "image_path", "distance", "metadata".
+        # dicts with keys: "id", "image_path", "distance", "metadata"
         return [
             {
                 "id": doc_id,
@@ -334,10 +334,10 @@ class VectorIndexer:
 
     def reset(self) -> None:
         """
-        Delete and recreate the collection, wiping all stored vectors.
+        Delete and recreate the collection, wiping all stored vectors
 
-        Use with caution — this is irreversible without re-indexing.
-        Useful during development when you want a clean slate.
+        Use with caution — this is irreversible without re-indexing
+        Useful during development when you want a clean slate
         """
         self.client.delete_collection(self.collection_name)
         self.collection = self._init_collection(self.collection_name)
