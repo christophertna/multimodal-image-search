@@ -109,11 +109,11 @@ class CLIPEmbedder:
         # During inference we never call .backward(), since we are not training it, we dont need backpropagation (which needs to track every math operation on the tensors)
         with torch.no_grad(): # no need to store all computational operations during the deep learning process, so this saves memory
 
-            # get_text_features() runs only the text encoder branch of CLIP, returning a tensor of shape (batch_size, 512)
+            # get_text_features() runs only the text encoder branch of CLIP, returning a tensor of shape (batch_size, 512), which is a 2D tensor
             text_features = self.model.get_text_features(**inputs) # **: double asterisk for tensor dicionnary unpacking (input ids and masks)
 
-        # Then take [0] to go from shape (1, 512) --> (512,) (removing the batch container)
-        # SYNTAX: (512,) the extra comma is to tell Python that this is a TUPLE containing 1 item, the number 512
+        # Then take [0] to go from shape (1, 512) --> (512,) (removing the batch container) --> 2D tensor into a 1D tensor
+        # SYNTAX: (512,) the extra comma is to tell Python that this is a TUPLE containing 1 item, the number 512, which is a 1D tensor 
 
         # Then we L2-normalize so that cosine similarity simplifies it to a single dot product (as mentionned earlier)
 
@@ -150,8 +150,8 @@ class CLIPEmbedder:
         with torch.no_grad(): 
  
             # .get_image_features()" runs the vision encoder only
-            image_features = self.model.get_image_features(**inputs) # recall ** unpacks the iamge tensor
-            #  Output shape is also (batch_size, 512), same embedding space as text
+            image_features = self.model.get_image_features(**inputs) # recall ** unpacks the image tensor
+            #  Output shape is also (batch_size, 512), a 2D tensor, same embedding space as text
 
         # same as text embedding, remove batch container, transfer to cpu and then L2-normalize 
         return self._normalize(image_features[0].cpu())
@@ -162,16 +162,21 @@ class CLIPEmbedder:
     def _normalize(tensor: torch.Tensor) -> torch.Tensor:
         """
         L2-normalize a 1D tensor so its magnitude/"length" (norm) equals to exactly 1
+        while keeping it pointing to the same exact direction
         """
-        # torch.nn.functional.normalize works along a given dimension.
-        # For a 1D vector, dim=0 is the only dimension. For batched tensors
-        # (2D), you would use dim=1 to normalize each row independently.
-        # YOUR TASK: Import torch.nn.functional and call normalize here.
+        # PyTorch Normalize works along a given dimension:
+        # For a 1D vector, dim=0 is the only dimension, aka look "down" at the columns
+        # For batched tensors (2D), you would use dim=1 to normalize each row independently, aka look "across" the rows 
 
-        #   - `torch.nn.functional` (often aliased as `F`) contains stateless
-        #     math ops like normalize, relu, softmax — no learnable parameters
-        #   - `normalize(tensor, dim=0)` divides every element by the tensor's L2 norm:
-        #     result = tensor / sqrt(sum(tensor[i]^2))  →  ||result|| = 1.0
-        #   - No separate import needed since `torch` is already imported above;
-        #     torch.nn.functional is a submodule accessible directly from it
+        # "torch.nn.functional" (submodule known as 'F') contains math operations like Normalize, ReLU and Softmax, for deep learning training 
+
+        # "normalize(tensor, dim=0)" divides every element by the tensor's L2 norm:
+        #  result = tensor / sqrt(sum(tensor[i]^2))  -->  ||result|| = 1.0
         return torch.nn.functional.normalize(tensor, dim=0)
+    
+    # in other words:
+    # 1- during embedding (before normalizing tensor), you have a 2D tensor like this: (1, 512) 
+    # 2- text_features[0] removes the batch, leaving behind (512,) a 1D tensor (a tensor holding the vector basically) 
+    # 3- move it to the RAM with .cpu(), so now accessible to Python or CPU-based libraries
+    # 4- normalize(tensor, dim=0) is called, and since we input a 1D tensor (512,) only the dim=0 exists for it (only valid axis for it),
+    #    since it treats the entire 1D array as a unit and scales its magnitude/norm to exactly 1.0 
