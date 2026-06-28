@@ -3,9 +3,10 @@
 A local-first, high-performance semantic search engine for images using CLIP and vector embeddings.
 
 ## Project Roadmap
--  **Step 1: Environment Setup** - Virtual environment configured.
+-  **Step 1: Environment Setup** 
     - Git repository initialized
     - Project structure created (`/src`, `/data`, `/index`)
+    - Virtual environment configured
 -  **Step 2: Model Integration**
     - `src/embedder.py` implemented using `CLIPModel` and `CLIPProcessor`
     - Device-agnostic code (CUDA/MPS/CPU) and L2-normalization established
