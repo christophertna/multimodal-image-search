@@ -19,6 +19,7 @@ A local-first, high-performance semantic search engine for images using CLIP and
 
 
 ## Project Structure
+```
 my_project/
 ├── .venv/                # Virtual environment
 ├── data/                 # Your image collection (outside src)
@@ -30,6 +31,7 @@ my_project/
 ├── main.py               # CLI entry point (indexing/searching)
 ├── requirements.txt      # Project dependencies
 └── README.md
+```
 
 
 ## Current Status
