@@ -180,3 +180,15 @@ class CLIPEmbedder:
     # 3- move it to the RAM with .cpu(), so now accessible to Python or CPU-based libraries
     # 4- normalize(tensor, dim=0) is called, and since we input a 1D tensor (512,) only the dim=0 exists for it (only valid axis for it),
     #    since it treats the entire 1D array as a unit and scales its magnitude/norm to exactly 1.0 
+
+        # torch.nn.functional.normalize works along a given dimension.
+        # For a 1D vector, dim=0 is the only dimension. For batched tensors
+        # (2D), you would use dim=1 to normalize each row independently.
+
+        #   - `torch.nn.functional` (often aliased as `F`) contains stateless
+        #     math ops like normalize, relu, softmax — no learnable parameters
+        #   - `normalize(tensor, dim=0)` divides every element by the tensor's L2 norm:
+        #     result = tensor / sqrt(sum(tensor[i]^2))  →  ||result|| = 1.0
+        #   - No separate import needed since `torch` is already imported above;
+        #     torch.nn.functional is a submodule accessible directly from it
+        return torch.nn.functional.normalize(tensor, dim=0)
