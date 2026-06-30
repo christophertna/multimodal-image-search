@@ -16,25 +16,36 @@ Architecture note:
     `st.session_state` is the mechanism for preserving values across re-runs
 """
 
+# Streamlit is a Python library specifically designed to turn data scripts into interactive, web-based applications
+# Basically a bridge between backend logic (Python code) & visual interface that users can interact with
+# Without it, pretty much forced to use the CLI for all
+
 import os
 from pathlib import Path
 
 import streamlit as st
 from PIL import Image
 
+# recall from __init__.py imports:
 from src.embedder import CLIPEmbedder
 from src.indexer import VectorIndexer
-
 
 # Constants
 DEFAULT_INDEX_DIR = "./index"
 DEFAULT_DATA_DIR  = "./data/images"
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
+# Cached resource loading:
+# @st.cache_resource tells Streamlit to run this function ONCE & reuse the returned object across all re-runs and all users
+# (basically the persistent memory of the application)
 
-# Cached resource loading
-# @st.cache_resource tells Streamlit to run this function ONCE and reuse the returned object across all re-runs and all users
-# Without it, the CLIP model would reload from disk on every interaction — adding ~5 seconds of latency each time
+# Normally, when you interact with a Streamlit app, Streamlit re-runs your entire script from top to bottom.
+# Without caching, every single button click would force the computer to:
+# 1- Reload the CLIP model from the hard drive into RAM
+# 2- Re-initialize the connection to the ChromaDB database
+# 3- Wait 5–10 seconds
+
+# This would be terrible and annoying, so the solution is to have it in the cache (reuse the objects)
 
 # This is the correct decorator for heavyweight objects like ML models and database connections
 # (Different from @st.cache_data, which is for cacheing serializable data like dataframes or API responses)
@@ -48,7 +59,6 @@ def load_embedder() -> CLIPEmbedder:
 def load_indexer(index_dir: str) -> VectorIndexer:
     """Connect to ChromaDB once and cache the connection for the session."""
     return VectorIndexer(persist_dir=index_dir)
-
 
 
 # Indexing logic
@@ -66,6 +76,8 @@ def index_images(data_dir: str, embedder: CLIPEmbedder, indexer: VectorIndexer) 
         indexer:   Connected VectorIndexer instance
     """
 
+    # basically almost a copy-paste from main.py logic wise
+    # in a professional project, main.py & app.py would import the functions from a shared pipeline file
     data_path = Path(data_dir)
 
     if not data_path.exists():
@@ -82,20 +94,21 @@ def index_images(data_dir: str, embedder: CLIPEmbedder, indexer: VectorIndexer) 
         st.warning(f"No supported images found in `{data_dir}`.")
         return
 
-    # st.progress() creates a progress bar widget (update it inside the loop with a float from 0.0 → 1.0)
+    # Progress bar widget (update it inside loop with float from 0.0 → 1.0)
     progress_bar = st.progress(0, text="Starting indexing...")
-    status       = st.empty()  # placeholder we'll overwrite each iteration
+    status       = st.empty()  # placeholder 
 
     embeddings, paths_str, failed = [], [], []
 
     for i, image_path in enumerate(image_paths):
         try:
-            # Call embedder.embed_image() and append to embeddings and paths_str
+
+            # Call embedder.embed_image() & append to embeddings and paths_str
             embedding = embedder.embed_image(str(image_path))
             embeddings.append(embedding)
             paths_str.append(str(image_path))
 
-            # Update the progress bar (value must be a float between 0.0 and 1.0)
+            # Update progress bar (value must be a float between 0.0 & 1.0)
             progress = (i + 1) / len(image_paths)
             progress_bar.progress(progress, text=f"Embedding {i + 1}/{len(image_paths)}: {image_path.name}")
 
@@ -106,7 +119,7 @@ def index_images(data_dir: str, embedder: CLIPEmbedder, indexer: VectorIndexer) 
     if embeddings:
         metadatas = [{"filename": Path(p).name} for p in paths_str]
 
-        # Now callall indexer.add_batch() with embeddings, paths_str, metadatas
+        # Now call all indexer.add_batch() with embeddings, paths_str, metadatas
         indexer.add_batch(embeddings, paths_str, metadatas)
 
     progress_bar.empty()  # Remove the progress bar once done
@@ -134,13 +147,16 @@ def run_search(query: str, top_k: int, embedder: CLIPEmbedder, indexer: VectorIn
         indexer:  Connected VectorIndexer instance
     """
 
+    # very similar to the search function in main.py
     if indexer.count() == 0:
         st.warning("Your index is empty. Go to the **Index Images** tab and index a folder first.")
         return
 
+    # wrap the search in with st.spinner("Searching..."):
+    # tells website to show a loading animation so user knows app didnt crash
     with st.spinner("Searching..."):
         
-        # Embed the query and search the index
+        # Embed query & search the index
         query_vector = embedder.embed_text(query)
         results      = indexer.search(query_vector, top_k=top_k)
 
@@ -151,11 +167,11 @@ def run_search(query: str, top_k: int, embedder: CLIPEmbedder, indexer: VectorIn
     st.markdown(f"**{len(results)} results** for *\"{query}\"*")
 
 
-    # Render results as a responsive image grid:
+    # Render and display results as a responsive image grid:
     # st.columns(n) splits the layout into n equal columns
 
-    # Use 3 columns so results display as a grid rather than a vertical list
-    # zip() pairs each result with a column — when results run out, zip stops
+    # 3 columns so results display as a grid rather than a vertical list
+    # zip() pairs each result with a column (when results run out zip stops)
     cols = st.columns(3)
 
     for i, result in enumerate(results):
@@ -165,28 +181,29 @@ def run_search(query: str, top_k: int, embedder: CLIPEmbedder, indexer: VectorIn
             image_path = result["image_path"]
 
             if os.path.exists(image_path):
-                image = Image.open(image_path)
+                image = Image.open(image_path) 
 
                 # st.image() renders a PIL Image in the UI
-                # `use_container_width=True` makes it fill the column width responsively.
-                st.image(image, use_container_width=True)
+                # `use_container_width=True` makes it fill the column width responsively
+                st.image(image, use_container_width=True) # display image
             else:
                 st.warning(f"Image not found on disk: `{image_path}`")
 
-            # Display filename and similarity score below each image
+            # Display filename and similarity score below each image (similar in main.py)
             similarity = 1 - result["distance"]
             filename   = result["metadata"].get("filename", Path(image_path).name)
 
-            # st.caption() renders small grey text (ideal for labels under images)
+            # st.caption() renders small grey text (for the labels under images)
             st.caption(f"**{filename}**  \nSimilarity: `{similarity:.3f}`")
 
 
 
 # Page config & layout
-# st.set_page_config() must be the 1st Streamlit call in the script
+# st.set_page_config() must be the 1st Streamlit call in the script 
+# (tells the browser how to render the app before any other content appears)
 
-# It controls the browser tab title, icon, and layout width
-# ()`layout="wide"` uses the full browser width instead of a narrow centered column)
+# Controls the browser tab title, icon, and layout width
+# `layout="wide"` uses full browser width instead of a narrow centered column
 st.set_page_config(
     page_title="Image Search",
     page_icon="🔍",
@@ -194,12 +211,12 @@ st.set_page_config(
 )
 
 st.title("🔍 Local Image Search")
-st.caption("Semantic image search powered by CLIP + ChromaDB — runs entirely on your machine.")
+st.caption("Semantic image search powered by CLIP + ChromaDB (runs entirely on your machine)")
 
 
 # Sidebar settings:
 # st.sidebar is a special container that renders a collapsible panel on the left side of the page 
-# Good for settings that don't belong in the main content area
+# (Good for settings that dont belong in the main content area)
 with st.sidebar:
     st.header("Settings")
 
@@ -235,8 +252,8 @@ with st.sidebar:
 
 
 # Main tabs:
-# st.tabs() creates a tabbed layout. Each `with tab:` block renders content only when that tab is active
-# This keeps the UI clean by separating the indexing workflow from the search workflow
+# st.tabs() creates a tabbed layout: each `with tab:` block renders content only when that tab is active
+# (keeps UI clean by separating indexing workflow from search workflow)
 tab_search, tab_index = st.tabs(["Search", "Index Images"])
 
 # --- Search tab ---
@@ -248,7 +265,7 @@ with tab_search:
 
     # st.button() returns True only on the re-run triggered by a click
 
-    # We also trigger search when the user presses Enter in the text input
+    # Also trigger search if user presses Enter in the text input
     # by checking if `query` is non-empty and the button was clicked
     if st.button("Search", type="primary") and query.strip():
         embedder = load_embedder()
@@ -261,7 +278,7 @@ with tab_search:
 with tab_index:
     st.markdown(
         f"Index all images from **`{data_dir}`** into ChromaDB. "
-        "Re-indexing is safe — existing images are updated, not duplicated."
+        "Re-indexing is safe (existing images are updated, not duplicated)"
     )
 
     if st.button("Start Indexing", type="primary"):
