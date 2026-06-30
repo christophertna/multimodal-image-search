@@ -35,4 +35,4 @@ my_project/
 
 
 ## Current Status
-Finished **Step 3**, now onto main.py (combine embedder + indexer) and later on app.py (Step 4)
+Completed main.py, now onto app.py for Step 4 (Streamlit UI + search logic)
