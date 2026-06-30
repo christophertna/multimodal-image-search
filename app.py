@@ -81,7 +81,6 @@ def index_images(data_dir: str, embedder: CLIPEmbedder, indexer: VectorIndexer) 
     data_path = Path(data_dir)
 
     if not data_path.exists():
-        # HINT: st.error() renders a red error box in the UI.
         st.error(f"Folder not found: `{data_dir}`. Create it and add images first.")
         return
 
@@ -94,14 +93,32 @@ def index_images(data_dir: str, embedder: CLIPEmbedder, indexer: VectorIndexer) 
         st.warning(f"No supported images found in `{data_dir}`.")
         return
 
+    # Fetch all existing IDs from ChromaDB ONCE before the loop:
+    # Important for efficiency: querying the DB inside the loop would mean 1 DB round-trip per image (slow) 
+
+    # Fetching once and storing as a Python set means each check is an O(1) hash lookup in memory (instant)
+    existing_ids = set(indexer.collection.get()["ids"])
+
     # Progress bar widget (update it inside loop with float from 0.0 → 1.0)
     progress_bar = st.progress(0, text="Starting indexing...")
-    status       = st.empty()  # placeholder 
+    status       = st.empty()  # placeholder
 
     embeddings, paths_str, failed = [], [], []
+    skipped = 0
 
     for i, image_path in enumerate(image_paths):
         try:
+
+            # Check if this image is already in the index by comparing its hash against set of existing IDs fetched above
+            # If it's already there, update the progress bar and skip it (no need to re-embed something that hasntt changed)
+            if indexer._path_to_id(str(image_path)) in existing_ids:
+                skipped += 1
+                progress = (i + 1) / len(image_paths)   
+                progress_bar.progress(
+                    progress,
+                    text=f"Skipping {i + 1}/{len(image_paths)}: {image_path.name} (already indexed)"
+                )
+                continue
 
             # Call embedder.embed_image() & append to embeddings and paths_str
             embedding = embedder.embed_image(str(image_path))
@@ -119,14 +136,15 @@ def index_images(data_dir: str, embedder: CLIPEmbedder, indexer: VectorIndexer) 
     if embeddings:
         metadatas = [{"filename": Path(p).name} for p in paths_str]
 
-        # Now call all indexer.add_batch() with embeddings, paths_str, metadatas
+        # Now call indexer.add_batch() with embeddings, paths_str, metadatas
         indexer.add_batch(embeddings, paths_str, metadatas)
 
     progress_bar.empty()  # Remove the progress bar once done
 
     st.success(
-        f"Indexed {len(embeddings)} images successfully. "
-        f"{len(failed)} skipped. "
+        f"Indexed {len(embeddings)} new images. "
+        f"{skipped} already indexed (skipped). "
+        f"{len(failed)} failed. "
         f"Total in index: {indexer.count()}"
     )
 

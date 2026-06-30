@@ -116,6 +116,11 @@ class CLIPEmbedder:
         # SYNTAX: (512,) the extra comma is to tell Python that this is a TUPLE containing 1 item, the number 512, which is a 1D tensor 
 
         # Then we L2-normalize so that cosine similarity simplifies it to a single dot product (as mentionned earlier)
+        
+        if hasattr(text_features, 'text_embeds'):
+            text_features = text_features.text_embeds
+        elif hasattr(text_features, 'pooler_output'):
+            text_features = text_features.pooler_output
 
         # finally .cpu() moves the tensor back to RAM so it's device-agnostic for the indexer
         return self._normalize(text_features[0].cpu())
@@ -152,6 +157,12 @@ class CLIPEmbedder:
             # .get_image_features()" runs the vision encoder only
             image_features = self.model.get_image_features(**inputs) # recall ** unpacks the image tensor
             #  Output shape is also (batch_size, 512), a 2D tensor, same embedding space as text
+
+        #debug
+        if hasattr(image_features, 'image_embeds'):
+            image_features = image_features.image_embeds
+        elif hasattr(image_features, 'pooler_output'):
+            image_features = image_features.pooler_output
 
         # same as text embedding, remove batch container, transfer to cpu and then L2-normalize 
         return self._normalize(image_features[0].cpu())
