@@ -1,29 +1,16 @@
-# Multimodal Image Search Engine
+# Local Multimodal Image Search Engine
 
-A local-first, high-performance semantic search engine for images using CLIP and vector embeddings.
-
-## Project Roadmap
--  **Step 1: Environment Setup** 
-    - Git repository initialized
-    - Project structure created (`/src`, `/data`, `/index`)
-    - Virtual environment configured
--  **Step 2: Model Integration**
-    - `src/embedder.py` implemented using `CLIPModel` and `CLIPProcessor`
-    - Device-agnostic code (CUDA/MPS/CPU) and L2-normalization established
--  **Step 3: Vector Indexing**
-    - Implemented `src/indexer.py` to batch-process images
-    - Integrated ChromaDB for high-speed local similarity search
--  **Step 4: Search Interface**
-    - Built search logic
-    - Created Streamlit UI for user interaction
-
+A local semantic image search engine built with CLIP and ChromaDB. 
+Instead of searching by filename or tags, it understands the *content* of your images — 
+type a natural language query like `"a dog on a beach"` and it retrieves the most visually 
+similar images from your local folder. Runs entirely on your machine with no cloud services or API keys required.
 
 ## Project Structure
 ```
 my_project/
 ├── .venv/                # Virtual environment
 ├── data/                 # Your image collection (outside src)
-├── index/                # local ChromaDB database
+├── index/                # Local ChromaDB database
 ├── src/                  # Core logic (importable packages)
 │   ├── __init__.py
 │   ├── embedder.py
@@ -138,8 +125,6 @@ Browser should open automatically at `http://localhost:8501`.
 ---
 
 
----
-
 ### CLI Usage (without Streamlit)
 You can also run the pipeline directly from the terminal:
 ```bash
@@ -154,7 +139,28 @@ python main.py --mode search --query "a photo of a cat" --top_k 10
 ```
 
 
-## Troubleshooting (All errors encountered)
+---
+
+## Personal Learning Section
+
+## Main Project Roadmap
+-  **Step 1: Environment Setup** 
+    - Git repository initialized
+    - Project structure created (`/src`, `/data`, `/index`)
+    - Virtual environment configured
+-  **Step 2: Model Integration**
+    - `src/embedder.py` implemented using `CLIPModel` and `CLIPProcessor`
+    - Device-agnostic code (CUDA/MPS/CPU) and L2-normalization established
+-  **Step 3: Vector Indexing**
+    - Implemented `src/indexer.py` to batch-process images
+    - Integrated ChromaDB for high-speed local similarity search
+-  **Step 4: Search Interface**
+    - Built search logic
+    - Created Streamlit UI for user interaction
+
+
+
+## Troubleshooting (All issues encountered)
 
 ### `ModuleNotFoundError: No module named 'torchvision'`
 Install torchvision explicitly, matching the CUDA version:
@@ -223,6 +229,3 @@ queries for better results, ideally prefixed with `"a photo of"`:
 "a photo of a sunset over mountains"
 "a photo of a person smiling"
 ```
-
-## Current Status
-Completed app.py, currently testing final overall application
