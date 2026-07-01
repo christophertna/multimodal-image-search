@@ -203,7 +203,7 @@ def run_search(query: str, top_k: int, embedder: CLIPEmbedder, indexer: VectorIn
 
                 # st.image() renders a PIL Image in the UI
                 # `use_container_width=True` makes it fill the column width responsively
-                st.image(image, use_container_width=True) # display image
+                st.image(image, width='stretch') # display image
             else:
                 st.warning(f"Image not found on disk: `{image_path}`")
 
