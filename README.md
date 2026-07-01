@@ -14,8 +14,8 @@ A local-first, high-performance semantic search engine for images using CLIP and
     - Implemented `src/indexer.py` to batch-process images
     - Integrated ChromaDB for high-speed local similarity search
 -  **Step 4: Search Interface**
-    - Build search logic
-    - Create Streamlit UI for user interaction
+    - Built search logic
+    - Created Streamlit UI for user interaction
 
 
 ## Project Structure
@@ -23,6 +23,7 @@ A local-first, high-performance semantic search engine for images using CLIP and
 my_project/
 ├── .venv/                # Virtual environment
 ├── data/                 # Your image collection (outside src)
+├── index/                # local ChromaDB database
 ├── src/                  # Core logic (importable packages)
 │   ├── __init__.py
 │   ├── embedder.py
@@ -34,7 +35,7 @@ my_project/
 ```
 
 
-## Troubleshooting
+## Troubleshooting (All errors encountered)
 
 ### `ModuleNotFoundError: No module named 'torchvision'`
 Install torchvision explicitly, matching the CUDA version:
@@ -91,19 +92,6 @@ elif hasattr(text_features, 'pooler_output'):
 
 ---
 
-### Search returns irrelevant results
-With a small image set (under ~50 images), ChromaDB returns the top-k results 
-regardless of actual relevance — it picks the least-wrong matches from whatever 
-is available. Two ways to improve this:
-
-1. **Add more images** — aim for 50-100+ diverse images for noticeably better results
-2. **Filter low-confidence results** — add a minimum similarity threshold in `app.py`:
-```python
-results = [r for r in results if (1 - r["distance"]) > 0.20]
-```
-
----
-
 ### Search precision is low with single-word queries
 CLIP was trained on descriptive sentences, not keywords. Use natural language 
 queries for better results, ideally prefixed with `"a photo of"`:
@@ -118,4 +106,4 @@ queries for better results, ideally prefixed with `"a photo of"`:
 ```
 
 ## Current Status
-Completed app.py, currently testing
+Completed app.py, currently testing final overall application
