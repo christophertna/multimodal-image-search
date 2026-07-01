@@ -35,6 +35,125 @@ my_project/
 ```
 
 
+## Setup & Installation
+
+### Prerequisites
+- Python 3.12 (not 3.13 — see Troubleshooting)
+- NVIDIA GPU with CUDA support (optional but recommended)
+- Git
+
+---
+
+### 1. Clone the Repository
+```bash
+git clone https://github.com/your-username/multimodal-image-search.git
+cd multimodal-image-search
+```
+
+---
+
+### 2. Create a Virtual Environment with Python 3.12
+```bash
+py -3.12 -m venv venv
+```
+
+Activate it:
+```bash
+# Windows
+venv\Scripts\activate
+
+# Mac/Linux
+source venv/bin/activate
+```
+
+You should see `(venv)` at the start of your terminal prompt confirming it's active.
+
+---
+
+### 3. Install PyTorch with CUDA Support
+If you have an NVIDIA GPU:
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+```
+
+If you are on CPU only:
+```bash
+pip install torch torchvision
+```
+
+Verify CUDA is detected (NVIDIA GPU users only):
+```bash
+python -c "import torch; print(torch.cuda.is_available())"
+# Should print: True
+```
+
+---
+
+### 4. Install Remaining Dependencies
+```bash
+pip install transformers pillow chromadb streamlit
+```
+
+---
+
+### 5. Set Up Project Folders
+Create the image folder where your images will live:
+```bash
+# Windows
+mkdir data\images
+
+# Mac/Linux
+mkdir -p data/images
+```
+
+Drop any `.jpg`, `.jpeg`, `.png`, `.bmp`, or `.webp` images into `data/images/`.
+Aim for at least 20-50 images for reasonable search quality.
+
+---
+
+### 6. Run the App
+```bash
+streamlit run app.py
+```
+
+Your browser will open automatically at `http://localhost:8501`.
+
+---
+
+### 7. Index Your Images
+1. In the browser, go to the **Index Images** tab
+2. Confirm the image folder path in the sidebar matches where your images are (`./data/images` by default)
+3. Click **Start Indexing**
+4. Wait for the progress bar to complete — the first run also downloads the CLIP model (~350MB, one time only)
+5. The sidebar will update showing the number of vectors stored
+
+---
+
+### 8. Search
+1. Switch to the **Search** tab
+2. Type a natural language query such as `"a photo of a sunset"` 
+3. Click **Search**
+4. Results appear as an image grid ranked by similarity score
+
+---
+
+
+---
+
+### CLI Usage (without Streamlit)
+You can also run the pipeline directly from the terminal:
+```bash
+# Index all images in a folder
+python main.py --mode index --data_dir ./data/images
+
+# Search with a text query
+python main.py --mode search --query "a photo of a cat"
+
+# Search and return more results
+python main.py --mode search --query "a photo of a cat" --top_k 10
+```
+
+
 ## Troubleshooting (All errors encountered)
 
 ### `ModuleNotFoundError: No module named 'torchvision'`
