@@ -46,7 +46,7 @@ my_project/
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/multimodal-image-search.git
+git clone https://github.com/christophertna/multimodal-image-search.git
 cd multimodal-image-search
 ```
 
@@ -116,7 +116,7 @@ Aim for at least 20-50 images for reasonable search quality.
 streamlit run app.py
 ```
 
-Your browser will open automatically at `http://localhost:8501`.
+Browser should open automatically at `http://localhost:8501`.
 
 ---
 
@@ -124,7 +124,7 @@ Your browser will open automatically at `http://localhost:8501`.
 1. In the browser, go to the **Index Images** tab
 2. Confirm the image folder path in the sidebar matches where your images are (`./data/images` by default)
 3. Click **Start Indexing**
-4. Wait for the progress bar to complete — the first run also downloads the CLIP model (~350MB, one time only)
+4. Wait for the progress bar to complete — the first run also downloads the CLIP model (~350MB, 1 time only)
 5. The sidebar will update showing the number of vectors stored
 
 ---
