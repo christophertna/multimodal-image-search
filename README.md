@@ -169,8 +169,9 @@ python main.py --mode search --query "a photo of a cat" --top_k 10
     - Built search logic
     - Created Streamlit UI for user interaction
 
+---
 
-## Troubleshooting (All issues encountered)
+## Troubleshooting (All issues encountered):
 
 ---
 
