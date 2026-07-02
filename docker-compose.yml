@@ -1,0 +1,85 @@
+# docker-compose.yml (how to run the container)
+# 
+#
+# What is docker-compose?
+#   Docker Compose is a tool for defining and running containers using a YAML
+#   config file instead of long `docker run` commands with many flags
+#
+#   Without Compose, running the app would require:
+#     "docker run -p 8501:8501 -v ./data:/app/data -v ./index:/app/index ..."
+#
+#   With Compose, it's just:
+#     docker compose up
+#
+# Key concepts in here:
+#   services  — the containers to run (we have 1: "app")
+#   volumes   — links between your local folders and folders inside the container
+#   ports     — maps a port on your machine to a port inside the container
+
+services:
+
+  app:
+    # "build" tells Compose to build the IMAGE from Dockerfile
+    # 
+    # "context: ." means use the current directory as the build context, since
+    # Docker will look for a Dockerfile here and can access all files in this folder
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # "container_name" gives container a proper name
+    # 
+    # Without this, Docker generates a random name (not good and weird)
+    # With this, can reference it by name: "docker logs image-search-app"
+    container_name: image-search-app
+
+
+    # "ports" map host port to container port
+    #
+    # Format: "HOST_PORT:CONTAINER_PORT"
+    # "8501:8501" means: when you visit localhost:8501 on your machine,
+    # traffic is forwarded to port 8501 inside the container where Streamlit runs
+    #
+    # Can also change the left side to use a different port on your machine, ex:
+    # "8080:8501" would make app available at localhost:8080
+    ports:
+      - "8501:8501"
+
+    
+    # "volumes" persist data between container restarts
+    # 
+    # Solution to "everything gets erased on restart":
+    # Volumes create a live link between a folder on YOUR machine and a folder
+    # INSIDE the container (reads and writes go to actual disk)
+    #
+    # Format: "./local/path:./container/path"
+    #
+    # ./data/images → /app/data/images
+    #   Your local images folder is mounted into the container:
+    #   app can read your images without them being baked into the image.
+    #   Add new images locally and they appear inside the container instantly
+    #
+    # ./index → /app/index
+    #   ChromaDB writes its database files here.
+    #   Because this maps to your local ./index folder, database survives
+    #   container restarts, so no need to re-index every time
+    volumes:
+      - ./data/images:/app/data/images
+      - ./index:/app/index
+
+   
+    # "environment" set environment variables at runtime
+    # 
+    # These override/extend the ENV values set in the Dockerfile
+    # "STREAMLIT_BROWSER_GATHER_USAGE_STATS=false" disables the email prompt
+    # that appears on first run, just a cleaner experience inside a container
+    environment:
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+
+
+    # "restart" is basically the container restart policy
+    # 
+    # "unless-stopped": Docker will automatically restart the container
+    # if it crashes/Docker Desktop restarts, but NOT if you manually
+    # stop it with `docker compose down`
+    restart: unless-stopped
