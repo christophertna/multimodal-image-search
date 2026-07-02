@@ -22,4 +22,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/<multimodal-image-search>:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/multimodal-image-search:latest
