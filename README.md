@@ -324,3 +324,132 @@ used in CLIP's training data:
 "a photo of a sunset over mountains"
 "a photo of a person smiling"
 ```
+
+---
+
+## Docker Setup
+
+The easiest way to run this project (no Python, venv, or CUDA configuration required):
+Docker handles the entire environment inside a container
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- Images placed in `./data/images/` before starting
+
+---
+
+### 1. Make sure Docker Desktop is running
+Open Docker Desktop from your Start menu or taskbar and wait for the green
+**"Engine running"** status in the bottom left corner.
+
+Verify it's working:
+```bash
+docker --version
+docker run hello-world
+```
+
+---
+
+### 2. Place your images in the images folder
+```
+multimodal-image-search/
+└── data/
+    └── images/      ← drop your image files here
+```
+
+---
+
+### 3. Build the container image
+Run this from the project root (same folder as `Dockerfile`):
+```bash
+docker compose build
+```
+
+This will:
+- Pull the Python 3.12 base image
+- Install all dependencies via pip
+- Copy your project code into the image
+
+This takes a few minutes on the first run. Subsequent builds are much faster
+thanks to Docker's layer caching. As long as `requirements.txt` hasnt changed,
+the pip install step is skipped entirely.
+
+---
+
+### 4. Start the app
+```bash
+docker compose up
+```
+
+Then open your browser at:
+```
+http://localhost:8501
+```
+
+---
+
+### 5. Index your images
+1. Go to the **Index Images** tab in the browser
+2. Click **Start Indexing**
+3. Wait for the progress bar to complete
+
+> **Note:** The first run will download the CLIP model (~350MB) inside the container.
+> This only happens once so its cached in the container image afterward.
+
+---
+
+### 6. Search
+Switch to the **Search** tab, type a natural language query, and click **Search**:
+```
+"a photo of a sunset"
+"a photo of a dog on the beach"
+"a photo of a person smiling"
+```
+
+---
+
+### Useful Docker commands
+
+```bash
+# Start the container in the background (detached mode)
+docker compose up -d
+
+# Stop the container
+docker compose down
+
+# View live logs
+docker compose logs -f
+
+# Rebuild after code changes
+docker compose build
+docker compose up
+
+# Open a shell inside the running container (for debugging)
+docker exec -it image-search-app bash
+```
+
+---
+
+### How persistence works
+Two folders on your local machine are mounted into the container as volumes:
+
+| Local folder | Container path | Purpose |
+|---|---|---|
+| `./data/images` | `/app/data/images` | Your images: add new ones locally and they appear instantly |
+| `./index` | `/app/index` | ChromaDB database: survives container restarts, no re-indexing needed |
+
+This means stopping and restarting the container with `docker compose down` and
+`docker compose up` keeps your index intact.
+
+---
+
+### CPU vs GPU
+The Docker setup runs on CPU only, which is sufficient for small to medium image
+collections. Embedding speed is slower than the native GPU setup but search quality
+and results are identical: the CLIP model weights are the same regardless of device.
+
+For reference:
+| Setup | Device | Indexing speed (per image) |
+|---|---|---|
+| Local venv (NVIDIA GPU) | CUDA | ~0.1s |
+| Docker | CPU | ~0.5-1s |
