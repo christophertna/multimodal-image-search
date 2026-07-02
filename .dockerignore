@@ -1,0 +1,51 @@
+# .dockerignore (tells Docker which files to exclude from the build context)
+# 
+#
+
+# Virtual environment (venv)
+# Container installs its own dependencies via pip in the Dockerfile.
+# Never copy the local venv since its platform-specific (Windows paths wont
+# work inside a Linux container) and hundreds of MB in size
+venv/
+.venv/
+env/
+
+# ChromaDB index
+# The index is mounted as a volume in docker-compose.yml, so the container
+# reads it from your local disk at runtime. Baking it into the image would
+# mean the index is frozen at build time and can never be updated.
+index/
+
+# Python cache files
+# Generated automatically at runtime so no need to copy them in
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Image data
+# Images are mounted as a volume in docker-compose.yml (./data/images).
+# Excluding them here means the build context stays small regardless of
+# how many images you have locally
+data/
+
+# Git files
+# Not needed inside the container
+.git/
+.gitignore
+
+# Environment files
+# If you ever add a .env file with secrets, this ensures it never gets
+# baked into the image
+.env
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp   
