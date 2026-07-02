@@ -1,7 +1,7 @@
 # Local Multimodal Image Search Engine
 
-A local semantic image search engine built with CLIP and ChromaDB. 
-Instead of searching by filename or tags, it understands the *content* of your images — 
+A local semantic image search engine built with OpenAI's CLIP and ChromaDB. 
+Instead of searching by filename or tags, it understands the *content* of your images, just 
 type a natural language query like `"a dog on a beach"` and it retrieves the most visually 
 similar images from your local folder. Runs entirely on your machine with no cloud services or API keys required.
 
@@ -53,7 +53,7 @@ venv\Scripts\activate
 source venv/bin/activate
 ```
 
-You should see `(venv)` at the start of your terminal prompt confirming it's active.
+Should see `(venv)` at the start of your terminal prompt confirming it's active.
 
 ---
 
@@ -111,7 +111,7 @@ Browser should open automatically at `http://localhost:8501`.
 1. In the browser, go to the **Index Images** tab
 2. Confirm the image folder path in the sidebar matches where your images are (`./data/images` by default)
 3. Click **Start Indexing**
-4. Wait for the progress bar to complete — the first run also downloads the CLIP model (~350MB, 1 time only)
+4. Wait for the progress bar to complete: 1st run also downloads the CLIP model (~350MB, 1 time only)
 5. The sidebar will update showing the number of vectors stored
 
 ---
@@ -191,7 +191,7 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 ```
 
 **Lesson learned:**
-Large ML libraries like `transformers` have many optional sub-dependencies that aren't 
+Large ML libraries like `transformers` have many optional sub-dependencies that arent 
 always listed upfront. 
 
 ---
@@ -214,7 +214,7 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 ```
 
 **Lesson learned:**
-PyTorch maintains separate package indexes per CUDA version (`cu121`, `cu124`, `cu128` etc.). 
+PyTorch maintains separate package indexes per CUDA version (`cu121`, `cu124`, `cu128` etc.)
 Not all indexes carry the latest PyTorch release so always use the most recent CUDA index. 
 
 ---
@@ -284,7 +284,7 @@ elif hasattr(text_features, 'pooler_output'):
 ```
 
 **Lesson learned:**
-ML library APIs change between versions and don't always raise obvious errors, so sometimes 
+ML library APIs change between versions and dont always raise obvious errors, so sometimes 
 they silently return a different type instead of crashing immediately. When debugging shape 
 errors, bypass the full application and test the suspect method directly in the terminal 
 to isolate the problem:
