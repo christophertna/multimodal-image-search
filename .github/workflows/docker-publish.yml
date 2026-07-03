@@ -31,6 +31,7 @@ on:
       - "docker-compose.yml"
       - "requirements.txt"
       - "tests/**"
+      - ".github/workflows/**"
 
 jobs:
   build:
