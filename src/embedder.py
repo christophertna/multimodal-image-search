@@ -191,4 +191,3 @@ class CLIPEmbedder:
     # 3- move it to the RAM with .cpu(), so now accessible to Python or CPU-based libraries
     # 4- normalize(tensor, dim=0) is called, and since we input a 1D tensor (512,) only the dim=0 exists for it (only valid axis for it),
     #    since it treats the entire 1D array as a unit and scales its magnitude/norm to exactly 1.0 
-

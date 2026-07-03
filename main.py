@@ -24,7 +24,6 @@ Architecture note:
 """
 
 import argparse
-import os
 from pathlib import Path
 
 # recall from __init__.py, import these

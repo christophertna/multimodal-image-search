@@ -22,7 +22,6 @@ import hashlib
 from typing import Optional
 
 import chromadb
-from chromadb.config import Settings
 import torch
 
 
