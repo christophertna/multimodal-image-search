@@ -1,16 +1,72 @@
 name: CI to Docker Hub
 
+# on — trigger configuration
+# 
+# paths — only run this workflow when files that ACTUALLY affect the build change
+# Pushing changes to README.md, docs, or empty folders wont trigger a build
+#
+# How path filtering works:
+#   GitHub checks which files changed in the push. If NONE of the changed files
+#   match the paths listed here, the workflow is skipped entirely.
+#
+# Paths included:
+#   src/**        — any change inside the src/ package (embedder, indexer)
+#   app.py        — main Streamlit UI
+#   main.py       — CLI entry point
+#   Dockerfile    — container definition changed
+#   docker-compose.yml — compose config changed
+#   requirements.txt   — dependencies changed (always rebuild if these change)
+#   tests/**      — test files changed (want to verify build still passes)
+#
+# Paths NOT included (intentionally excluded):
+#   README.md, .gitignore, docs/, *.md — documentation only, no code impact
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
+    paths:
+      - "src/**"
+      - "app.py"
+      - "main.py"
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - "requirements.txt"
+      - "tests/**"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Set up Python and run tests BEFORE building the Docker image:
+      # Called "fail fast": if tests fail, we skip the Docker build
+      # entirely and dont waste time/push a broken image to Docker Hub
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies for testing
+        run: |
+          pip install --upgrade pip
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+      # Only build and push the Docker image if tests passed.
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
