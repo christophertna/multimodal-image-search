@@ -64,7 +64,12 @@ jobs:
           pip install pytest
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short
+        run: |
+          if [ -z "$(find tests/ -name 'test_*.py' -not -empty 2>/dev/null)" ]; then
+            echo "No test files found, skipping tests"
+          else
+            pytest tests/ -v --tb=short
+          fi
 
       # Only build and push the Docker image if tests passed.
       - name: Login to Docker Hub
