@@ -329,8 +329,8 @@ used in CLIP's training data:
 
 ## Docker Setup
 
-The easiest way to run this project (no Python, venv, or CUDA configuration required):
-Docker handles the entire environment inside a container
+Easiest way to run this project (no Python/venv/CUDA configuration required):
+Docker handles the entire environment inside a container, but uses CPU bt default
 
 ### Prerequisites
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
