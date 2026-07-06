@@ -15,18 +15,21 @@ my_project/
 │   ├── __init__.py
 │   ├── embedder.py
 │   └── indexer.py
+│
 ├── app.py                  # Streamlit UI entry point
 ├── main.py                 # CLI entry point (indexing/searching)
 ├── requirements.txt        # Project dependencies
 ├── Dockerfile              # Docker container image definition
-├── .github/workflows
-│   ├── docker-publish.yml  # Docker container configuration
 ├── docker-compose.yml      # Docker container build/run
+├── .github/workflows
+│   └── docker-publish.yml  # Docker container configuration
+│
 ├── .streamlit              # Streamlit UI data
 ├── tests
 │   ├── __init__.py
 │   ├── test_embedder.py    # tests for embedding
 │   └── test_indexer.py     # tests for indexing
+│
 ├── .flake8                 # flake8 configuration
 └── README.md
 ```
@@ -247,7 +250,7 @@ new project: https://pytorch.org/get-started/locally/
 **Issue:**
 This was the MOST persistent bug in the project. After clicking Start Indexing, all 
 images would embed successfully (the progress bar completed), but then the app crashed 
-when trying to store them in ChromaDB. The error said it received a tensor of shape 
+when trying to store them in *ChromaDB*. The error said it received a tensor of shape 
 `(1, 50, 768)` when it expected `(512,)`. The shape `(1, 50, 768)` being 50 tokens & 768 
 hidden dimensions, is the raw internal hidden state of the TRANSFORMER, not the final 
 embedding vector. After ruling out issues in `app.py`, `indexer.py`, caching, and the 
@@ -427,7 +430,7 @@ Two folders on your local machine are mounted into the container as volumes:
 | Local folder | Container path | Purpose |
 |---|---|---|
 | `./data/images` | `/app/data/images` | Your images: add new ones locally and they appear instantly |
-| `./index` | `/app/index` | ChromaDB database: survives container restarts, no re-indexing needed |
+| `./index` | `/app/index` | *ChromaDB* database: survives container restarts, no re-indexing needed |
 
 This means stopping and restarting the container with `docker compose down` and
 `docker compose up` keeps your index intact.
@@ -574,7 +577,7 @@ To generate a Docker Hub access token:
     - Device-agnostic code (CUDA/MPS/CPU) and L2-normalization established
 -  **Step 3: Vector Indexing**
     - Implemented `src/indexer.py` to batch-process images
-    - Integrated ChromaDB for high-speed local similarity search
+    - Integrated *ChromaDB* for high-speed local similarity search
 -  **Step 4: Search Interface**
     - Built search logic
     - Created Streamlit UI for user interaction
