@@ -21,7 +21,6 @@ my_project/
 └── README.md
 ```
 
-
 ## Setup & Installation
 
 ### Prerequisites
@@ -150,24 +149,6 @@ python main.py --mode search --query "a photo of a cat" --top_k 10
 <img width="1918" height="907" alt="Results" src="https://github.com/user-attachments/assets/f23970f6-a7af-4187-8ac1-3862cf79caba" />
 <br>
 <img width="1919" height="909" alt="Results 2" src="https://github.com/user-attachments/assets/603cbdd6-bbb5-4720-81d8-4a72e242c68f" />
-
----
-
-
-## Main Project Roadmap
--  **Step 1: Environment Setup** 
-    - Git repository initialized
-    - Project structure created (`/src`, `/data`, `/index`)
-    - Virtual environment configured
--  **Step 2: Model Integration**
-    - `src/embedder.py` implemented using `CLIPModel` and `CLIPProcessor`
-    - Device-agnostic code (CUDA/MPS/CPU) and L2-normalization established
--  **Step 3: Vector Indexing**
-    - Implemented `src/indexer.py` to batch-process images
-    - Integrated ChromaDB for high-speed local similarity search
--  **Step 4: Search Interface**
-    - Built search logic
-    - Created Streamlit UI for user interaction
 
 ---
 
@@ -458,7 +439,7 @@ For reference:
 
 ### Docker Hub
 
-The latest image is automatically published to Docker Hub on every successful pipeline run:
+The latest image is automatically published to Docker Hub on every successful pipeline run.
 
 **Pull and run without cloning the repo:**
 ```bash
@@ -570,3 +551,22 @@ To generate a Docker Hub access token:
 2. Go to **Account Settings** → **Personal Access Tokens**
 3. Click **Generate new token**
 4. Copy the token and paste it as the `DOCKERHUB_TOKEN` secret on GitHub
+
+---
+
+## Main Project Roadmap
+-  **Step 1: Environment Setup** 
+    - Git repository initialized
+    - Project structure created (`/src`, `/data`, `/index`)
+    - Virtual environment configured
+-  **Step 2: Model Integration**
+    - `src/embedder.py` implemented using `CLIPModel` and `CLIPProcessor`
+    - Device-agnostic code (CUDA/MPS/CPU) and L2-normalization established
+-  **Step 3: Vector Indexing**
+    - Implemented `src/indexer.py` to batch-process images
+    - Integrated ChromaDB for high-speed local similarity search
+-  **Step 4: Search Interface**
+    - Built search logic
+    - Created Streamlit UI for user interaction
+
+---
