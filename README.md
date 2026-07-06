@@ -453,3 +453,120 @@ For reference:
 |---|---|---|
 | Local venv (NVIDIA GPU) | CUDA | ~0.1s |
 | Docker | CPU | ~0.5-1s |
+
+---
+
+### Docker Hub
+
+The latest image is automatically published to Docker Hub on every successful pipeline run:
+
+**Pull and run without cloning the repo:**
+```bash
+docker pull yourusername/multimodal-image-search:latest
+```
+
+Then create a `docker-compose.yml` locally:
+```yaml
+services:
+  app:
+    image: yourusername/multimodal-image-search:latest
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data/images:/app/data/images
+      - ./index:/app/index
+    environment:
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+    restart: unless-stopped
+```
+
+And run it:
+```bash
+docker compose up
+```
+
+This lets anyone run the app without cloning the repository, installing Python,
+or setting up a virtual environment — Docker handles everything.
+
+---
+
+## CI/CD Pipeline
+
+This project uses GitHub Actions for automated testing and Docker Hub for image distribution.
+
+---
+
+### GitHub Actions Workflow
+
+Every push to `main` that touches application code automatically:
+
+1. **Runs tests** — executes the full pytest suite against the embedder and indexer
+2. **Builds the Docker image** — verifies the container builds successfully
+3. **Pushes to Docker Hub** — publishes the latest image if all previous steps pass
+
+The pipeline is configured with path filtering, meaning it only triggers when relevant
+files change. Pushing changes to the README, documentation, or empty folders will not
+trigger a build.
+
+**Files that trigger the pipeline:**
+```
+src/**
+app.py
+main.py
+Dockerfile
+docker-compose.yml
+requirements.txt
+tests/**
+.github/workflows/**
+```
+
+You can view all workflow runs under the **Actions** tab on the GitHub repository.
+
+---
+
+### Running Tests Locally
+
+Make sure pytest is installed in your virtual environment:
+```bash
+pip install pytest
+```
+
+Run the full test suite:
+```bash
+pytest tests/ -v
+```
+
+The suite includes 23 tests covering:
+- Device detection (CUDA / MPS / CPU fallback)
+- Text and image embedding shape, normalization, and dtype
+- Cross-modal compatibility (text and image vectors share the same space)
+- ChromaDB ID generation and determinism
+- Embedding validation and dimension mismatch handling
+- Upsert idempotency (re-indexing the same image never creates duplicates)
+- Batch insertion and length mismatch handling
+- Similarity search correctness and self-similarity
+- Collection reset behavior
+
+All tests use temporary directories and generated data — your real `./index` folder
+and `./data/images/` are never touched during testing.
+
+---
+
+### Setting Up CI/CD Secrets
+
+For the GitHub Actions pipeline to push to Docker Hub, two repository secrets
+must be configured:
+
+1. Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions**
+2. Add the following secrets:
+
+| Secret name | Value |
+|---|---|
+| `DOCKERHUB_USERNAME` | Your Docker Hub username |
+| `DOCKERHUB_TOKEN` | A Docker Hub access token (not your password) |
+
+To generate a Docker Hub access token:
+1. Log in to [hub.docker.com](https://hub.docker.com)
+2. Go to **Account Settings** → **Personal Access Tokens**
+3. Click **Generate new token**
+4. Copy the token and paste it as the `DOCKERHUB_TOKEN` secret on GitHub
