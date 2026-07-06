@@ -24,7 +24,9 @@ my_project/
 ├── .github/workflows
 │   └── docker-publish.yml  # Docker container configuration
 │
-├── .streamlit              # Streamlit UI data
+├── .streamlit              
+│   └── config.toml         # Streamlit UI data
+│
 ├── tests
 │   ├── __init__.py
 │   ├── test_embedder.py    # tests for embedding
