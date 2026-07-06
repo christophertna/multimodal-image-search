@@ -1,7 +1,7 @@
 # Local Multimodal Image Search Engine
 
-A local semantic image search engine built with OpenAI's CLIP and ChromaDB. 
-Instead of searching by filename or tags, it understands the *content* of your images, just 
+A local semantic image search engine built with *OpenAI*'s *CLIP* model and *ChromaDB*. 
+Instead of searching by filename or tags, it understands the content of your images, just 
 type a natural language query like `"a dog on a beach"` and it retrieves the most visually 
 similar images from your local folder. Runs entirely on your machine with no cloud services or API keys required.
 
@@ -302,13 +302,13 @@ print('shape:', t.shape)
 ### Search precision is low with single-word queries
 
 **Issue:**
-Searching with single words like `"cat"` or `"food"` produced noticeably worse results 
-than longer descriptive phrases. However this is expected behavior and not a bug.
+Searching with single words like `"cat"` produced noticeably worse results 
+than longer descriptive phrases like` "a picture of a cat"` . However, this is expected behavior and not a bug.
 
 **Why it happens:**
-CLIP was trained on hundreds of millions of image-text pairs where the text side was 
+*OpenAI's CLIP* model was trained on hundreds millions of image/text pairs where the text side was 
 always a natural language DESCRIPTION like `"a photo of a cat sitting on a couch"`, 
-never a single keyword. So a one-word query produces a vague, diffuse vector in the 
+NEVER a single keyword. So a one-word query produces a vague vector in the 
 embedding space that doesnt point precisely toward any particular type of image. A full 
 sentence produces a sharp, specific vector that lands much closer to genuinely matching images.
 
@@ -316,10 +316,10 @@ sentence produces a sharp, specific vector that lands much closer to genuinely m
 Use natural language queries, ideally prefixed with `"a photo of"`, which is the exact phrasing 
 used in CLIP's training data:
 ```
-# Less precise
+Less precise:
 "cat"
 
-# More precise
+More precise:
 "a photo of a cat"
 "a photo of a sunset over mountains"
 "a photo of a person smiling"
