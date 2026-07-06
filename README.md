@@ -8,16 +8,26 @@ similar images from your local folder. Runs entirely on your machine with no clo
 ## Project Structure
 ```
 my_project/
-├── .venv/                # Virtual environment
-├── data/                 # Image collection (outside src)
-├── index/                # Local ChromaDB database
-├── src/                  # Core logic (importable packages)
+├── .venv/                  # Virtual environment
+├── data/                   # Image collection (outside src)
+├── index/                  # Local ChromaDB database
+├── src/                    # Core logic (importable packages)
 │   ├── __init__.py
 │   ├── embedder.py
 │   └── indexer.py
-├── app.py                # Streamlit UI entry point
-├── main.py               # CLI entry point (indexing/searching)
-├── requirements.txt      # Project dependencies
+├── app.py                  # Streamlit UI entry point
+├── main.py                 # CLI entry point (indexing/searching)
+├── requirements.txt        # Project dependencies
+├── Dockerfile              # Docker container image definition
+├── .github/workflows
+│   ├── docker-publish.yml  # Docker container configuration
+├── docker-compose.yml      # Docker container build/run
+├── .streamlit              # Streamlit UI data
+├── tests
+│   ├── __init__.py
+│   ├── test_embedder.py    # tests for embedding
+│   └── test_indexer.py     # tests for indexing
+├── .flake8                 # flake8 configuration
 └── README.md
 ```
 
