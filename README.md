@@ -157,13 +157,12 @@ python main.py --mode search --query "a photo of a cat" --top_k 10
 
 ## In Action
 
-<img width="1919" height="909" alt="Indexing" src="https://github.com/user-attachments/assets/9cbacb8f-7b35-4007-afa7-7827c2d2604c" />
+<img width="1918" height="908" alt="Search" src="https://github.com/user-attachments/assets/f4d34909-186d-443a-8865-054de34cea68" />
 <br>
-<img width="1919" height="905" alt="Search" src="https://github.com/user-attachments/assets/efea4d14-99c6-40a3-9ceb-47df4ce24a1b" />
+<img width="1919" height="898" alt="Indexing" src="https://github.com/user-attachments/assets/d0ded016-5048-4fac-906b-35d7303c7c07" />
 <br>
-<img width="1918" height="907" alt="Results" src="https://github.com/user-attachments/assets/f23970f6-a7af-4187-8ac1-3862cf79caba" />
+<img width="1916" height="907" alt="Results" src="https://github.com/user-attachments/assets/181dc5c9-a31b-4460-b9dd-329f4ca586d0" />
 <br>
-<img width="1919" height="909" alt="Results 2" src="https://github.com/user-attachments/assets/603cbdd6-bbb5-4720-81d8-4a72e242c68f" />
 
 ---
 
