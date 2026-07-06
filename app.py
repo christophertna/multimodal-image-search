@@ -42,18 +42,20 @@ SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 LIGHT_THEME = {
     "background": "#F2F0EA",
     "secondary_background": "#E3E0D8",
-    "text": "#2B2B2B",
+    "text": "#000000",
+    "border": "#000000",
     "primary": "#5B6C8F",
     "input_background": "#FFFFFF",
-    "input_text": "#2B2B2B",
+    "input_text": "#000000",
 }
 DARK_THEME = {
     "background": "#1E1E1E",
     "secondary_background": "#2A2A2A",
-    "text": "#EAEAEA",
+    "text": "#FFFFFF",
+    "border": "#FFFFFF",
     "primary": "#7C8DB5",
     "input_background": "#333333",
-    "input_text": "#F5F5F5",
+    "input_text": "#FFFFFF",
 }
 
 # Cached resource loading:
@@ -84,14 +86,11 @@ def load_indexer(index_dir: str) -> VectorIndexer:
 
 def apply_theme(dark: bool) -> None:
     """
-    Inject a small CSS override so the sidebar toggle can switch colors live.
-
-    This is the one place custom CSS is used in the whole file — everything
-    else relies on Streamlit's built-in theming/layout. Targets the actual
-    app/sidebar/button elements directly instead of guessing at Streamlit's
-    internal CSS variable names, so it's more likely to hold up across versions.
+    Inject CSS to handle all theme overrides, including the sidebar collapse button.
     """
     theme = DARK_THEME if dark else LIGHT_THEME
+    # Define a constant neutral color for the border
+    CONSTANT_BORDER_COLOR = "#808080"
 
     st.markdown(
         f"""
@@ -100,35 +99,22 @@ def apply_theme(dark: bool) -> None:
             background-color: {theme["background"]} !important;
             color: {theme["text"]} !important;
         }}
-        /* The top toolbar strip Streamlit renders above the page content —
-           left un-styled it stays white/default even when the rest of the
-           app is dark, which is the "white band" above the title. */
         [data-testid="stHeader"] {{
             background-color: {theme["background"]} !important;
         }}
         [data-testid="stSidebar"] {{
             background-color: {theme["secondary_background"]} !important;
         }}
-        /* Streamlit sets its own inline text color on nested elements
-           (captions, labels, metric text, etc.), not just the container,
-           so a rule on the container alone doesn't reach them. Some of
-           those inline colors come from a selector that's genuinely MORE
-           specific than a normal wildcard, so a plain "* {{ !important }}"
-           can still lose that tie. Repeating the same attribute selector
-           several times in a row (e.g. [data-testid="x"][data-testid="x"])
-           matches the exact same element but stacks extra specificity
-           weight on our side without needing to guess Streamlit's internal
-           class names — that's the trick used everywhere below. */
+        /* Sidebar collapse button fix */
+        [data-testid="stSidebarCollapsedControl"] {{
+            color: {theme["text"]} !important;
+        }}
+        [data-testid="stSidebarCollapsedControl"] svg {{
+            fill: {theme["text"]} !important;
+        }}
         [data-testid="stSidebar"][data-testid="stSidebar"][data-testid="stSidebar"] * {{
             color: {theme["text"]} !important;
         }}
-        /* Text inputs get their own background + text pair per mode —
-           they don't need to match the page colors, just be readable.
-           This selector is more specific than the wildcard above, so it
-           still wins for the actual input text. Placeholder text (the
-           greyed-out example shown before you type) is styled through the
-           separate ::placeholder pseudo-element, so it needs its own rule
-           or it stays whatever gray the browser/Streamlit defaults to. */
         [data-testid="stTextInput"] input,
         [data-testid="stTextArea"] textarea {{
             background-color: {theme["input_background"]} !important;
@@ -139,20 +125,12 @@ def apply_theme(dark: bool) -> None:
             color: {theme["input_text"]} !important;
             opacity: 0.6;
         }}
-        /* st.container(border=True) cards keep their own background AND
-           their own inline text colors on nested elements by default —
-           this is what was making "Images Indexed" / "Index Location" /
-           "Model" hard to read even after the container background fix. */
+        
         [data-testid="stVerticalBlockBorderWrapper"] {{
             background-color: {theme["secondary_background"]} !important;
+            border: 1px solid {CONSTANT_BORDER_COLOR} !important;
         }}
-        /* The metric label/value and caption text ("Images Indexed",
-           "Connected — x vectors in index", etc.) get their color set by
-           Streamlit directly on the innermost text element using a more
-           specific selector than a plain wildcard — same specificity-
-           stacking trick as the sidebar rule above, applied to every
-           plausible element/testid combination so it holds regardless of
-           which exact one Streamlit uses under the hood. */
+
         [data-testid="stVerticalBlockBorderWrapper"][data-testid="stVerticalBlockBorderWrapper"] *,
         [data-testid="stMetricLabel"][data-testid="stMetricLabel"],
         [data-testid="stMetricLabel"][data-testid="stMetricLabel"] *,
@@ -166,16 +144,28 @@ def apply_theme(dark: bool) -> None:
         [data-testid="stSidebar"][data-testid="stSidebar"] span {{
             color: {theme["text"]} !important;
         }}
-        /* Tab labels ("Search" / "Index Images") get their text color inline
-           from Streamlit's own theme engine too — same story, same fix. */
         body .stTabs [data-baseweb="tab"],
         body .stTabs [data-baseweb="tab"] * {{
             color: {theme["text"]} !important;
         }}
-        .stButton > button[kind="primary"] {{
+        .stButton > button[kind="primary"],
+        .stButton > button[data-testid="stBaseButton-primary"],
+        .stButton > button[data-testid="baseButton-primary"] {{
             background-color: {theme["primary"]} !important;
             border-color: {theme["primary"]} !important;
             color: white !important;
+        }}
+        .stButton > button[kind="primary"] p,
+        .stButton > button[data-testid="stBaseButton-primary"] p,
+        .stButton > button[data-testid="baseButton-primary"] p {{
+            color: white !important;
+        }}
+        [data-testid="stAlert"] {{
+            background-color: {theme["secondary_background"]} !important;
+        }}
+        [data-testid="stAlert"][data-testid="stAlert"],
+        [data-testid="stAlert"][data-testid="stAlert"] * {{
+            color: {theme["text"]} !important;
         }}
         </style>
         """,
@@ -357,7 +347,16 @@ st.set_page_config(
 )
 
 st.title("🔍 Local Image Search")
-st.caption("Semantic image search powered by CLIP + ChromaDB (runs entirely on your machine)")
+# st.caption() bakes in its own fixed low-opacity gray, same issue as the
+# sidebar "Connected —" status — rendered as themed markdown instead so it
+# follows dark/light mode. Read from session_state (not the `dark_mode`
+# variable) since the sidebar toggle hasn't run yet at this point in the script.
+_subtitle_theme = DARK_THEME if st.session_state.get("dark_mode", False) else LIGHT_THEME
+st.markdown(
+    f'<p style="color:{_subtitle_theme["text"]}; font-size:0.875rem; opacity:0.85; margin:0;">'
+    f'Semantic image search powered by CLIP + ChromaDB (runs entirely on your machine)</p>',
+    unsafe_allow_html=True,
+)
 st.write("")  # extra whitespace under the header for a cleaner, less cramped feel
 
 
@@ -369,7 +368,11 @@ with st.sidebar:
     st.write("")
 
     st.subheader("Appearance")
-    dark_mode = st.toggle("🌙 Dark mode", key="dark_mode")
+    # st.session_state already holds the post-click value by the time the
+    # script reruns, so we can read it here to pick the label before the
+    # widget is (re)created with that same value.
+    theme_label = "🌙 Dark mode" if st.session_state.get("dark_mode", False) else "☀️ Light mode"
+    dark_mode = st.toggle(theme_label, key="dark_mode")
     apply_theme(dark_mode)
 
     st.write("")
@@ -399,7 +402,16 @@ with st.sidebar:
     # Wrap this in a try/except because load_indexer() may fail if the index_dir path is invalid (dont want the sidebar to crash)
     try:
         _indexer = load_indexer(index_dir)
-        st.caption(f"✅ Connected — {_indexer.count()} vectors in index")
+        # st.caption() bakes in its own fixed low-opacity gray text color,
+        # which our theme CSS override can't reliably win against — so this
+        # message is rendered as styled markdown instead, using the active
+        # theme's text color directly.
+        _status_theme = DARK_THEME if dark_mode else LIGHT_THEME
+        st.markdown(
+            f'<p style="color:{_status_theme["text"]}; font-size:0.875rem; opacity:0.85; margin:0;">'
+            f'✅ Connected — {_indexer.count()} vectors in index</p>',
+            unsafe_allow_html=True,
+        )
     except Exception as e:
         st.error(f"Could not connect to index: {e}")
 
@@ -473,15 +485,26 @@ with tab_index:
 
         # Quick preview of how many images are sitting in the folder, so the user
         # knows what "Start Indexing" is about to do before they click it
+        # (rendered as themed markdown, not st.caption(), for the same
+        # gray-that-never-changes reason as the other captions above)
         _preview_path = Path(data_dir)
+        _preview_theme = DARK_THEME if dark_mode else LIGHT_THEME
         if _preview_path.exists():
             _preview_count = len([
                 p for p in _preview_path.iterdir()
                 if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS
             ])
-            st.caption(f"📸 {_preview_count} supported image(s) found in this folder.")
+            st.markdown(
+                f'<p style="color:{_preview_theme["text"]}; font-size:0.875rem; opacity:0.85; margin:0;">'
+                f'📸 {_preview_count} supported image(s) found in this folder.</p>',
+                unsafe_allow_html=True,
+            )
         else:
-            st.caption("⚠️ This folder doesn't exist yet.")
+            st.markdown(
+                f'<p style="color:{_preview_theme["text"]}; font-size:0.875rem; opacity:0.85; margin:0;">'
+                f'⚠️ This folder doesn\'t exist yet.</p>',
+                unsafe_allow_html=True,
+            )
 
         if st.button("Start Indexing", type="primary"):
             embedder = load_embedder()
@@ -490,4 +513,4 @@ with tab_index:
 
             # st.rerun() forces Streamlit to re-run the script immediately
             # Used here so the sidebar metric updates right after indexing completes
-            st.rerun()
+            st.rerun()  
