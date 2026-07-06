@@ -462,14 +462,14 @@ The latest image is automatically published to Docker Hub on every successful pi
 
 **Pull and run without cloning the repo:**
 ```bash
-docker pull yourusername/multimodal-image-search:latest
+docker pull christophertan203/multimodal-image-search:latest
 ```
 
 Then create a `docker-compose.yml` locally:
 ```yaml
 services:
   app:
-    image: yourusername/multimodal-image-search:latest
+    image: christophertan203/multimodal-image-search:latest
     ports:
       - "8501:8501"
     volumes:
@@ -486,7 +486,7 @@ docker compose up
 ```
 
 This lets anyone run the app without cloning the repository, installing Python,
-or setting up a virtual environment — Docker handles everything.
+or setting up a venv since Docker handles everything.
 
 ---
 
@@ -526,7 +526,7 @@ You can view all workflow runs under the **Actions** tab on the GitHub repositor
 
 ### Running Tests Locally
 
-Make sure pytest is installed in your virtual environment:
+Make sure *pytest* is installed in your virtual environment:
 ```bash
 pip install pytest
 ```
@@ -536,18 +536,18 @@ Run the full test suite:
 pytest tests/ -v
 ```
 
-The suite includes 23 tests covering:
+The suite includes tests covering:
 - Device detection (CUDA / MPS / CPU fallback)
-- Text and image embedding shape, normalization, and dtype
-- Cross-modal compatibility (text and image vectors share the same space)
-- ChromaDB ID generation and determinism
+- Text & image embedding shape, normalization, and dtype
+- Cross-modal compatibility (text/image vectors sharing the same space)
+- *ChromaDB* ID generation and determinism
 - Embedding validation and dimension mismatch handling
-- Upsert idempotency (re-indexing the same image never creates duplicates)
+- Upsert idempotency (re-indexing same image never creates duplicates)
 - Batch insertion and length mismatch handling
 - Similarity search correctness and self-similarity
 - Collection reset behavior
 
-All tests use temporary directories and generated data — your real `./index` folder
+All tests use temporary directories and generated data. The real `./index` folder
 and `./data/images/` are never touched during testing.
 
 ---
