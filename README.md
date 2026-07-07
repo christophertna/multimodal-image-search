@@ -386,10 +386,10 @@ http://localhost:8501
 ### 5. Index your images
 1. Go to the **Index Images** tab in the browser
 2. Click **Start Indexing**
-3. Wait for the progress bar to complete
+3. Wait for the process to complete
 
 > **Note:** The first run will download the CLIP model (~350MB) inside the container.
-> This only happens once so its cached in the container image afterward.
+> (This only happens once so its cached in the container image afterward)
 
 ---
 
