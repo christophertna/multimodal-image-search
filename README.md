@@ -388,7 +388,7 @@ http://localhost:8501
 2. Click **Start Indexing**
 3. Wait for the process to complete
 
-> **Note:** The first run will download the CLIP model (~350MB) inside the container.
+> **Note:** The first run will download the CLIP model (~350MB) inside the container. <br>
 > (This only happens once so its cached in the container image afterward)
 
 ---
