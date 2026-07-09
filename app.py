@@ -714,6 +714,30 @@ with tab_analytics:
                 return meta["filename"]
             return Path(meta.get("image_path", "unknown")).name
 
+        # Altair charts carry their own default styling (white background,
+        # black axis lines/ticks/titles) independent of Streamlit's theme.
+        # Only setting labelColor (as an earlier version of this tab did)
+        # leaves the axis lines, tick marks, and titles at their fixed
+        # default color — which is why most of the chart effectively
+        # vanished against a dark background. This covers everything.
+        def _themed(chart):
+            return (
+                chart.configure(background="transparent")
+                .configure_view(strokeWidth=0)
+                .configure_axis(
+                    labelColor=_analytics_theme["text"],
+                    titleColor=_analytics_theme["text"],
+                    domainColor=_analytics_theme["border"],
+                    tickColor=_analytics_theme["border"],
+                    gridColor=_analytics_theme["border"] + "22",
+                    labelAngle=0,
+                )
+                .configure_legend(
+                    labelColor=_analytics_theme["text"],
+                    titleColor=_analytics_theme["text"],
+                )
+            )
+
         # --- File extension breakdown (bar chart) ---
         with st.container(border=True):
             st.markdown("#### 🗃️ File Types")
@@ -725,17 +749,15 @@ with tab_analytics:
             _ext_df = pd.DataFrame(
                 {"extension": list(_ext_counts.keys()), "count": list(_ext_counts.values())}
             )
-            _ext_chart = (
+            _ext_chart = _themed(
                 alt.Chart(_ext_df)
                 .mark_bar(color=_analytics_theme["primary"], cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
                 .encode(
-                    x=alt.X("extension", title=None, axis=alt.Axis(labelColor=_analytics_theme["text"])),
-                    y=alt.Y("count", title="Images", axis=alt.Axis(labelColor=_analytics_theme["text"])),
+                    x=alt.X("extension", title=None),
+                    y=alt.Y("count", title="Images"),
                     tooltip=["extension", "count"],
                 )
-                .properties(height=260)
-                .configure_axis(gridColor=_analytics_theme["border"] + "22")
-                .configure_view(strokeWidth=0)
+                .properties(height=220)
             )
             st.altair_chart(_ext_chart, use_container_width=True)
 
@@ -770,20 +792,18 @@ with tab_analytics:
                         "type": _exts,
                     })
 
-                    _scatter = (
+                    # Height dropped from 420 to 280 — the container was
+                    # noticeably oversized for what it actually shows
+                    _scatter = _themed(
                         alt.Chart(_proj_df)
                         .mark_circle(size=110, opacity=0.85)
                         .encode(
                             x=alt.X("x", axis=None),
                             y=alt.Y("y", axis=None),
-                            color=alt.Color(
-                                "type",
-                                legend=alt.Legend(title="File type", labelColor=_analytics_theme["text"], titleColor=_analytics_theme["text"]),
-                            ),
+                            color=alt.Color("type", legend=alt.Legend(title="File type")),
                             tooltip=["filename", "type"],
                         )
-                        .properties(height=420)
-                        .configure_view(strokeWidth=0)
+                        .properties(height=280)
                     )
                     st.altair_chart(_scatter, use_container_width=True)
                 except ModuleNotFoundError:
