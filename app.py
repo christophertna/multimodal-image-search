@@ -23,6 +23,8 @@ Architecture note:
 import os
 from pathlib import Path
 
+import altair as alt
+import pandas as pd
 import streamlit as st
 from PIL import Image
 
@@ -103,12 +105,18 @@ def apply_theme(dark: bool) -> None:
         [data-testid="stSidebar"] {{
             background-color: {theme["secondary_background"]} !important;
         }}
-        /* Sidebar collapse button fix */
-        [data-testid="stSidebarCollapsedControl"] {{
+        /* Sidebar collapse/expand button fix. stSidebarCollapsedControl
+           (and targeting it as an <svg>) no longer exist in current
+           Streamlit — confirmed via live DOM inspection. The collapse
+           ("<<", shown inside the open sidebar) and expand (">>", shown in
+           the main content when the sidebar is closed) are two separate
+           real testids, and the icon is a Material Symbols font ligature,
+           not an <svg>, hence no svg-fill rule needed anymore. */
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapseButton"] span,
+        [data-testid="stExpandSidebarButton"],
+        [data-testid="stExpandSidebarButton"] span {{
             color: {theme["text"]} !important;
-        }}
-        [data-testid="stSidebarCollapsedControl"] svg {{
-            fill: {theme["text"]} !important;
         }}
         [data-testid="stSidebar"][data-testid="stSidebar"][data-testid="stSidebar"] * {{
             color: {theme["text"]} !important;
@@ -236,6 +244,39 @@ def apply_theme(dark: bool) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+# Analytics logic
+@st.cache_data(show_spinner="Computing t-SNE projection...")
+def compute_tsne_coords(embeddings: list) -> list:
+    """
+    Reduce CLIP embedding vectors (usually 512-dim) down to 2D points so they
+    can be plotted on a scatter chart — this is what lets you visually see
+    which images CLIP considers "similar" (they'll cluster together).
+
+    @st.cache_data means this only re-runs when the embeddings actually
+    change (i.e. after re-indexing) — not on every widget interaction —
+    since t-SNE is too slow to recompute on every Streamlit re-run.
+
+    Takes in:
+        embeddings: list of embedding vectors (one per indexed image)
+
+    Requires scikit-learn (`pip install scikit-learn`), which isn't a
+    dependency of the rest of the app, so this is imported lazily here
+    rather than at the top of the file — that way the app still runs fine
+    without it unless you actually open the Analytics tab.
+    """
+    import numpy as np
+    from sklearn.manifold import TSNE
+
+    vectors = np.array(embeddings)
+
+    # Perplexity must be less than the number of samples — default of 30
+    # breaks on small collections, so scale it down for tiny datasets
+    perplexity = max(2, min(30, len(vectors) - 1))
+
+    tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42, init="pca")
+    return tsne.fit_transform(vectors).tolist()
 
 
 # Indexing logic
@@ -516,7 +557,7 @@ st.write("")
 # Main tabs:
 # st.tabs() creates a tabbed layout: each `with tab:` block renders content only when that tab is active
 # (keeps UI clean by separating indexing workflow from search workflow)
-tab_search, tab_index = st.tabs(["🔎  Search", "📥  Index Images"])
+tab_search, tab_index, tab_analytics = st.tabs(["🔎  Search", "📥  Index Images", "📊  Analytics"])
 
 # --- Search tab ---
 with tab_search:
@@ -608,4 +649,146 @@ with tab_index:
 
                 # st.rerun() forces Streamlit to re-run the script immediately
                 # Used here so the sidebar metric updates right after indexing completes
-                st.rerun()
+                st.rerun()  
+
+# --- Analytics tab ---
+with tab_analytics:
+    st.write("")
+    _analytics_theme = DARK_THEME if dark_mode else LIGHT_THEME
+
+    try:
+        _analytics_indexer = load_indexer(index_dir)
+        # collection.get() is the same public chromadb collection object
+        # already used elsewhere in this file (see index_images()) — no
+        # changes needed to indexer.py to support this tab. `include` must
+        # be set explicitly since chromadb doesn't return embeddings by
+        # default (they're the expensive part of the payload).
+        _all_data = _analytics_indexer.collection.get(include=["embeddings", "metadatas"])
+    except Exception as e:
+        st.error(f"Could not load index: {e}")
+        _all_data = {"ids": [], "embeddings": [], "metadatas": []}
+
+    _ids = _all_data.get("ids", [])
+
+    if len(_ids) == 0:
+        with st.container(border=True):
+            st.markdown("#### 📊 Image Analytics")
+            st.markdown(
+                "No images indexed yet — head to the **Index Images** tab first, "
+                "then come back here to see your collection's stats."
+            )
+    else:
+        _metadatas  = _all_data.get("metadatas", [])
+        _embeddings = _all_data.get("embeddings", [])
+
+        # --- Stat cards: total indexed + total storage on disk ---
+        # Storage is measured from the actual files in data_dir (not the
+        # vectors themselves, which are tiny) so it reflects the real
+        # disk footprint of the image collection being indexed
+        _total_bytes = 0
+        _data_path = Path(data_dir)
+        if _data_path.exists():
+            for p in _data_path.iterdir():
+                if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS:
+                    _total_bytes += p.stat().st_size
+        _total_mb = _total_bytes / (1024 * 1024)
+
+        stat_col1, stat_col2 = st.columns(2)
+        with stat_col1:
+            with st.container(border=True):
+                st.metric("🗂️ Images Indexed", len(_ids))
+        with stat_col2:
+            with st.container(border=True):
+                st.metric("💾 Storage Used", f"{_total_mb:.1f} MB")
+
+        st.write("")
+
+        # Real indexer.py only guarantees an "image_path" key in metadata
+        # (added automatically by add()/add_batch()) — "filename" is an
+        # extra key app.py's own index_images() happens to pass in, so it
+        # won't be there for anything indexed another way (e.g. via
+        # main.py, or a direct indexer.add() call). Fall back to deriving
+        # it from image_path so this tab doesn't blow up on those records.
+        def _get_filename(meta: dict) -> str:
+            if meta.get("filename"):
+                return meta["filename"]
+            return Path(meta.get("image_path", "unknown")).name
+
+        # --- File extension breakdown (bar chart) ---
+        with st.container(border=True):
+            st.markdown("#### 🗃️ File Types")
+            _ext_counts: dict = {}
+            for meta in _metadatas:
+                _ext = Path(_get_filename(meta)).suffix.lower() or "unknown"
+                _ext_counts[_ext] = _ext_counts.get(_ext, 0) + 1
+
+            _ext_df = pd.DataFrame(
+                {"extension": list(_ext_counts.keys()), "count": list(_ext_counts.values())}
+            )
+            _ext_chart = (
+                alt.Chart(_ext_df)
+                .mark_bar(color=_analytics_theme["primary"], cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+                .encode(
+                    x=alt.X("extension", title=None, axis=alt.Axis(labelColor=_analytics_theme["text"])),
+                    y=alt.Y("count", title="Images", axis=alt.Axis(labelColor=_analytics_theme["text"])),
+                    tooltip=["extension", "count"],
+                )
+                .properties(height=260)
+                .configure_axis(gridColor=_analytics_theme["border"] + "22")
+                .configure_view(strokeWidth=0)
+            )
+            st.altair_chart(_ext_chart, use_container_width=True)
+
+        st.write("")
+
+        # --- t-SNE 2D projection of the CLIP embeddings ---
+        with st.container(border=True):
+            st.markdown("#### 🧠 How CLIP Sees Your Images")
+            st.markdown(
+                "Each image's 512-dimensional CLIP embedding is projected down to 2D. "
+                "Images CLIP considers visually/semantically similar will cluster closer together."
+            )
+
+            if len(_ids) < 4:
+                st.markdown(
+                    f'<div style="display:inline-block; margin:0.6rem 0 0.4rem 0; padding:0.3rem 0.9rem; '
+                    f'border-radius:999px; background-color:{_analytics_theme["primary"]}26; '
+                    f'color:{_analytics_theme["text"]}; font-size:0.85rem; font-weight:600;">'
+                    f'Index at least 4 images to see the 2D projection</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                try:
+                    _coords = compute_tsne_coords(_embeddings)
+                    _filenames = [_get_filename(m) for m in _metadatas]
+                    _exts = [Path(f).suffix.lower() or "unknown" for f in _filenames]
+
+                    _proj_df = pd.DataFrame({
+                        "x": [c[0] for c in _coords],
+                        "y": [c[1] for c in _coords],
+                        "filename": _filenames,
+                        "type": _exts,
+                    })
+
+                    _scatter = (
+                        alt.Chart(_proj_df)
+                        .mark_circle(size=110, opacity=0.85)
+                        .encode(
+                            x=alt.X("x", axis=None),
+                            y=alt.Y("y", axis=None),
+                            color=alt.Color(
+                                "type",
+                                legend=alt.Legend(title="File type", labelColor=_analytics_theme["text"], titleColor=_analytics_theme["text"]),
+                            ),
+                            tooltip=["filename", "type"],
+                        )
+                        .properties(height=420)
+                        .configure_view(strokeWidth=0)
+                    )
+                    st.altair_chart(_scatter, use_container_width=True)
+                except ModuleNotFoundError:
+                    st.error(
+                        "This needs scikit-learn, which isn't installed. Run "
+                        "`pip install scikit-learn` (add `--break-system-packages` if needed), "
+                        "then reload this tab."
+                    )
