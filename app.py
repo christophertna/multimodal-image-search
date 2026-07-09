@@ -146,12 +146,22 @@ def apply_theme(dark: bool) -> None:
            a 0-width border is invisible no matter its color. The old
            selector is kept alongside for older Streamlit versions that
            still use it. */
+        /* The full-width line under the tab bar is a ::after pseudo-element
+           on the tablist (found via live DOM inspection: background-color
+           rgba(49, 51, 63, 0.1), a dark gray at 10% opacity) — invisible
+           against a dark background since it never lightens with the mode. */
+        [data-testid="stTabs"] [role="tablist"]::after {{
+            background-color: {theme["border"]} !important;
+            opacity: 0.3;
+        }}
         [data-testid="stVerticalBlock"] {{
             border-color: {theme["border"]} !important;
         }}
         [data-testid="stVerticalBlockBorderWrapper"][data-testid="stVerticalBlockBorderWrapper"] {{
             background-color: {theme["secondary_background"]} !important;
             border: 1px solid {theme["border"]} !important;
+            border-radius: 12px !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
         }}
 
         [data-testid="stVerticalBlockBorderWrapper"][data-testid="stVerticalBlockBorderWrapper"] *,
@@ -176,6 +186,14 @@ def apply_theme(dark: bool) -> None:
            so the old selector matched nothing and tabs kept Streamlit's
            native colors (a fixed red accent on the active tab, fixed gray
            on inactive ones) regardless of mode. stTab is the real testid. */
+        /* Inline markdown code spans (e.g. `./data/images`) use Streamlit's
+           own fixed white background + green syntax color by default,
+           unrelated to the app's theme — confirmed via live DOM inspection
+           (rgb(248, 249, 251) bg / rgb(21, 130, 55) text, always, both modes). */
+        code {{
+            background-color: {theme["secondary_background"]} !important;
+            color: {theme["text"]} !important;
+        }}
         [data-testid="stTab"],
         [data-testid="stTab"] p {{
             color: {theme["text"]} !important;
@@ -194,6 +212,13 @@ def apply_theme(dark: bool) -> None:
             background-color: {theme["primary"]} !important;
             border-color: {theme["primary"]} !important;
             color: white !important;
+            transition: filter 0.15s ease, transform 0.15s ease !important;
+        }}
+        .stButton > button[kind="primary"]:hover,
+        .stButton > button[data-testid="stBaseButton-primary"]:hover,
+        .stButton > button[data-testid="baseButton-primary"]:hover {{
+            filter: brightness(1.12);
+            transform: translateY(-1px);
         }}
         .stButton > button[kind="primary"] p,
         .stButton > button[data-testid="stBaseButton-primary"] p,
@@ -557,7 +582,7 @@ with tab_index:
                     if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS
                 ])
                 st.markdown(
-                    f'<div style="display:inline-block; margin-top:0.6rem; padding:0.3rem 0.9rem; '
+                    f'<div style="display:inline-block; margin:0.6rem 0 0.4rem 0; padding:0.3rem 0.9rem; '
                     f'border-radius:999px; background-color:{_index_theme["primary"]}26; '
                     f'color:{_index_theme["text"]}; font-size:0.85rem; font-weight:600;">'
                     f'📸 {_preview_count} supported image(s) found in this folder</div>',
@@ -565,12 +590,15 @@ with tab_index:
                 )
             else:
                 st.markdown(
-                    f'<div style="display:inline-block; margin-top:0.6rem; padding:0.3rem 0.9rem; '
+                    f'<div style="display:inline-block; margin:0.6rem 0 0.4rem 0; padding:0.3rem 0.9rem; '
                     f'border-radius:999px; background-color:{_index_theme["primary"]}26; '
                     f'color:{_index_theme["text"]}; font-size:0.85rem; font-weight:600;">'
                     f'⚠️ This folder doesn\'t exist yet</div>',
                     unsafe_allow_html=True,
                 )
+            # A little breathing room so the badge above doesn't sit flush
+            # against the card's bottom border
+            st.write("")
 
         with col_action:
             if st.button("Start Indexing", type="primary", width='stretch'):
