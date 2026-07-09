@@ -53,7 +53,7 @@ DARK_THEME = {
     "secondary_background": "#2A2A2A",
     "text": "#FFFFFF",
     "border": "#FFFFFF",
-    "primary": "#7C8DB5",
+    "primary": "#5C7CFA",
     "input_background": "#333333",
     "input_text": "#FFFFFF",
 }
@@ -89,8 +89,6 @@ def apply_theme(dark: bool) -> None:
     Inject CSS to handle all theme overrides, including the sidebar collapse button.
     """
     theme = DARK_THEME if dark else LIGHT_THEME
-    # Define a constant neutral color for the border
-    CONSTANT_BORDER_COLOR = "#808080"
 
     st.markdown(
         f"""
@@ -125,10 +123,35 @@ def apply_theme(dark: bool) -> None:
             color: {theme["input_text"]} !important;
             opacity: 0.6;
         }}
+        /* The raw <input>/<textarea> above gets our background, but Streamlit
+           wraps it in an outer root element that keeps its own separate,
+           un-themed background/border. Since the inner input doesn't fill
+           that box exactly, the old color shows through as a thin sliver
+           above/below it — reading as a stray "extra border". Theming the
+           root element too removes the mismatch. (stTextInputRootElement is
+           the current real testid — older data-baseweb selectors no longer
+           exist in newer Streamlit versions and matched nothing.) */
+        [data-testid="stTextInputRootElement"],
+        [data-testid="stTextAreaRootElement"] {{
+            background-color: {theme["input_background"]} !important;
+            border-color: {theme["border"]} !important;
+        }}
         
-        [data-testid="stVerticalBlockBorderWrapper"] {{
+        /* stVerticalBlockBorderWrapper no longer exists in current Streamlit
+           (confirmed via live DOM inspection) — the border/background for
+           st.container(border=True) now live directly on the plain
+           stVerticalBlock testid instead, shared with every other vertical
+           block on the page. We only touch border-color (not width/style)
+           so untouched, non-bordered blocks elsewhere aren't affected —
+           a 0-width border is invisible no matter its color. The old
+           selector is kept alongside for older Streamlit versions that
+           still use it. */
+        [data-testid="stVerticalBlock"] {{
+            border-color: {theme["border"]} !important;
+        }}
+        [data-testid="stVerticalBlockBorderWrapper"][data-testid="stVerticalBlockBorderWrapper"] {{
             background-color: {theme["secondary_background"]} !important;
-            border: 1px solid {CONSTANT_BORDER_COLOR} !important;
+            border: 1px solid {theme["border"]} !important;
         }}
 
         [data-testid="stVerticalBlockBorderWrapper"][data-testid="stVerticalBlockBorderWrapper"] *,
@@ -147,6 +170,23 @@ def apply_theme(dark: bool) -> None:
         body .stTabs [data-baseweb="tab"],
         body .stTabs [data-baseweb="tab"] * {{
             color: {theme["text"]} !important;
+        }}
+        /* Tab labels ("Search" / "Index Images") — data-baseweb doesn't exist
+           in current Streamlit versions (confirmed via live DOM inspection),
+           so the old selector matched nothing and tabs kept Streamlit's
+           native colors (a fixed red accent on the active tab, fixed gray
+           on inactive ones) regardless of mode. stTab is the real testid. */
+        [data-testid="stTab"],
+        [data-testid="stTab"] p {{
+            color: {theme["text"]} !important;
+        }}
+        /* The active-tab underline is a React Aria internal element with no
+           data-testid — found via live DOM inspection (class
+           "react-aria-SelectionIndicator"). It's Streamlit's fixed red
+           accent by default, so it's re-themed to the app's primary color
+           to move with dark/light mode too. */
+        .react-aria-SelectionIndicator {{
+            background-color: {theme["primary"]} !important;
         }}
         .stButton > button[kind="primary"],
         .stButton > button[data-testid="stBaseButton-primary"],
@@ -306,6 +346,8 @@ def run_search(query: str, top_k: int, embedder: CLIPEmbedder, indexer: VectorIn
 
     st.write("")  # small breathing room before the grid
 
+    _filename_theme = DARK_THEME if st.session_state.get("dark_mode", False) else LIGHT_THEME
+
     for i, result in enumerate(results):
         col = cols[i % 3]  # cycle through columns: 0, 1, 2, 0, 1, 2 ...
 
@@ -328,8 +370,13 @@ def run_search(query: str, top_k: int, embedder: CLIPEmbedder, indexer: VectorIn
                 similarity = 1 - result["distance"]
                 filename   = result["metadata"].get("filename", Path(image_path).name)
 
-                # st.caption() renders small grey text (for the labels under images)
-                st.caption(f"**{filename}**")
+                # Rendered as themed markdown (not st.caption()) so the filename
+                # label follows dark/light mode instead of staying Streamlit's
+                # fixed caption gray, same fix as the other labels in this file.
+                st.markdown(
+                    f'<p style="color:{_filename_theme["text"]}; margin:0;"><strong>{filename}</strong></p>',
+                    unsafe_allow_html=True,
+                )
                 st.progress(min(max(similarity, 0.0), 1.0), text=f"Similarity: {similarity:.3f}")
 
 
@@ -351,9 +398,11 @@ st.title("🔍 Local Image Search")
 # sidebar "Connected —" status — rendered as themed markdown instead so it
 # follows dark/light mode. Read from session_state (not the `dark_mode`
 # variable) since the sidebar toggle hasn't run yet at this point in the script.
+# No opacity dimming here (unlike an earlier version of this fix) so the
+# color swap reads as a true black/white shift, matching the title above it.
 _subtitle_theme = DARK_THEME if st.session_state.get("dark_mode", False) else LIGHT_THEME
 st.markdown(
-    f'<p style="color:{_subtitle_theme["text"]}; font-size:0.875rem; opacity:0.85; margin:0;">'
+    f'<p style="color:{_subtitle_theme["text"]}; margin:0;">'
     f'Semantic image search powered by CLIP + ChromaDB (runs entirely on your machine)</p>',
     unsafe_allow_html=True,
 )
@@ -405,10 +454,11 @@ with st.sidebar:
         # st.caption() bakes in its own fixed low-opacity gray text color,
         # which our theme CSS override can't reliably win against — so this
         # message is rendered as styled markdown instead, using the active
-        # theme's text color directly.
+        # theme's text color directly, with no opacity dimming so it reads
+        # as true black/white like the title.
         _status_theme = DARK_THEME if dark_mode else LIGHT_THEME
         st.markdown(
-            f'<p style="color:{_status_theme["text"]}; font-size:0.875rem; opacity:0.85; margin:0;">'
+            f'<p style="color:{_status_theme["text"]}; margin:0;">'
             f'✅ Connected — {_indexer.count()} vectors in index</p>',
             unsafe_allow_html=True,
         )
@@ -478,39 +528,56 @@ with tab_search:
 with tab_index:
     st.write("")
     with st.container(border=True):
-        st.markdown(
-            f"Index all images from **`{data_dir}`** into ChromaDB.  \n"
-            "Re-indexing is safe — existing images are updated, not duplicated."
-        )
+        _index_theme = DARK_THEME if dark_mode else LIGHT_THEME
 
-        # Quick preview of how many images are sitting in the folder, so the user
-        # knows what "Start Indexing" is about to do before they click it
-        # (rendered as themed markdown, not st.caption(), for the same
-        # gray-that-never-changes reason as the other captions above)
-        _preview_path = Path(data_dir)
-        _preview_theme = DARK_THEME if dark_mode else LIGHT_THEME
-        if _preview_path.exists():
-            _preview_count = len([
-                p for p in _preview_path.iterdir()
-                if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS
-            ])
+        # Split into a text column and an action column so "Start Indexing"
+        # reads as a clear call-to-action next to the info, instead of just
+        # sitting stacked underneath a wall of text
+        col_info, col_action = st.columns([3, 1], vertical_alignment="center")
+
+        with col_info:
+            st.markdown("#### 📥 Index Your Images")
             st.markdown(
-                f'<p style="color:{_preview_theme["text"]}; font-size:0.875rem; opacity:0.85; margin:0;">'
-                f'📸 {_preview_count} supported image(s) found in this folder.</p>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                f'<p style="color:{_preview_theme["text"]}; font-size:0.875rem; opacity:0.85; margin:0;">'
-                f'⚠️ This folder doesn\'t exist yet.</p>',
-                unsafe_allow_html=True,
+                f"Index all images from **`{data_dir}`** into ChromaDB.  \n"
+                "Re-indexing is safe — existing images are updated, not duplicated."
             )
 
-        if st.button("Start Indexing", type="primary"):
-            embedder = load_embedder()
-            indexer  = load_indexer(index_dir)
-            index_images(data_dir, embedder, indexer)
+            # Quick preview of how many images are sitting in the folder, so the user
+            # knows what "Start Indexing" is about to do before they click it
+            # (rendered as themed markdown, not st.caption(), for the same
+            # gray-that-never-changes reason as the other captions above — no
+            # opacity dimming, so it swaps between true black/white like the title)
+            # Shown as a small rounded "badge" (tinted with the theme's primary
+            # color) instead of a plain line of text, so it reads as a status
+            # chip rather than another paragraph.
+            _preview_path = Path(data_dir)
+            if _preview_path.exists():
+                _preview_count = len([
+                    p for p in _preview_path.iterdir()
+                    if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS
+                ])
+                st.markdown(
+                    f'<div style="display:inline-block; margin-top:0.6rem; padding:0.3rem 0.9rem; '
+                    f'border-radius:999px; background-color:{_index_theme["primary"]}26; '
+                    f'color:{_index_theme["text"]}; font-size:0.85rem; font-weight:600;">'
+                    f'📸 {_preview_count} supported image(s) found in this folder</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f'<div style="display:inline-block; margin-top:0.6rem; padding:0.3rem 0.9rem; '
+                    f'border-radius:999px; background-color:{_index_theme["primary"]}26; '
+                    f'color:{_index_theme["text"]}; font-size:0.85rem; font-weight:600;">'
+                    f'⚠️ This folder doesn\'t exist yet</div>',
+                    unsafe_allow_html=True,
+                )
 
-            # st.rerun() forces Streamlit to re-run the script immediately
-            # Used here so the sidebar metric updates right after indexing completes
-            st.rerun()  
+        with col_action:
+            if st.button("Start Indexing", type="primary", width='stretch'):
+                embedder = load_embedder()
+                indexer  = load_indexer(index_dir)
+                index_images(data_dir, embedder, indexer)
+
+                # st.rerun() forces Streamlit to re-run the script immediately
+                # Used here so the sidebar metric updates right after indexing completes
+                st.rerun()
