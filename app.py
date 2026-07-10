@@ -279,6 +279,69 @@ def compute_tsne_coords(embeddings: list) -> list:
     return tsne.fit_transform(vectors).tolist()
 
 
+@st.cache_data(show_spinner="Running pairwise similarity analysis...")
+def compute_similarity_analysis(embeddings: list, top_n: int = 5) -> dict:
+    """
+    Full pairwise cosine similarity sweep across every indexed vector, used to find:
+      - the most REDUNDANT pairs (near-duplicate images — highest similarity)
+      - the most UNIQUE images (lowest average similarity to everything else)
+
+    indexer.py's docstring notes embedder.py L2-normalizes every embedding to
+    a unit vector, so cosine similarity simplifies to a plain dot product —
+    but vectors are re-normalized here anyway (cheap insurance) so this stays
+    correct even if that assumption ever drifts.
+
+    Only needs numpy (already a dependency via pandas/streamlit) — no new
+    package required, unlike the t-SNE feature above.
+
+    Takes in:
+        embeddings: list of embedding vectors (one per indexed image)
+        top_n:      how many top pairs / outliers to return
+
+    Returns a dict:
+        "redundant_pairs": list of (index_i, index_j, similarity) tuples,
+                            sorted most-similar first
+        "unique_images":   list of (index, avg_similarity) tuples,
+                            sorted least-similar-to-everything first
+    """
+    import numpy as np
+
+    vectors = np.array(embeddings, dtype=np.float64)
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    norms[norms == 0] = 1  # guard against an all-zero embedding (shouldn't happen, but avoid a divide-by-zero)
+    vectors = vectors / norms
+
+    n = len(vectors)
+
+    # vectors @ vectors.T is an n x n matrix where entry [i, j] is the cosine
+    # similarity between image i and image j (this is the O(n²) "brute force"
+    # step — fine up to a few thousand images, see the cap in the UI below)
+    sim_matrix = vectors @ vectors.T
+
+    # --- Most redundant pairs ---
+    # np.triu_indices(n, k=1) gives every (i, j) pair with i < j — skips the
+    # diagonal (self-similarity, always 1.0) and avoids counting each pair twice
+    iu = np.triu_indices(n, k=1)
+    pair_sims = sim_matrix[iu]
+    top_pair_positions = np.argsort(pair_sims)[::-1][:top_n]
+    redundant_pairs = [
+        (int(iu[0][pos]), int(iu[1][pos]), float(pair_sims[pos]))
+        for pos in top_pair_positions
+    ]
+
+    # --- Most unique images ---
+    # Zero out the diagonal first so self-similarity (1.0) doesn't skew each
+    # image's average similarity to the rest of the collection
+    np.fill_diagonal(sim_matrix, 0.0)
+    avg_similarity = sim_matrix.sum(axis=1) / max(n - 1, 1)
+    most_unique_positions = np.argsort(avg_similarity)[:top_n]
+    unique_images = [
+        (int(pos), float(avg_similarity[pos])) for pos in most_unique_positions
+    ]
+
+    return {"redundant_pairs": redundant_pairs, "unique_images": unique_images}
+
+
 # Indexing logic
 def index_images(data_dir: str, embedder: CLIPEmbedder, indexer: VectorIndexer) -> None:
     """
@@ -812,3 +875,95 @@ with tab_analytics:
                         "`pip install scikit-learn` (add `--break-system-packages` if needed), "
                         "then reload this tab."
                     )
+
+        st.write("")
+
+        # --- Vector metadata analysis: redundant pairs + outliers ---
+        with st.container(border=True):
+            st.markdown("#### 🧬 Vector Metadata Analysis")
+            st.markdown(
+                "A full pairwise cosine similarity sweep across every indexed vector — "
+                "surfaces near-duplicate images worth cleaning up, and outliers that "
+                "look unlike anything else in the collection."
+            )
+
+            # O(n²) memory/compute — trivial for a personal collection of a
+            # few thousand images (numpy handles this in well under a
+            # second), but a full similarity matrix for tens of thousands of
+            # images would start to use real memory, so this is capped
+            # rather than silently getting slow/heavy on a huge folder.
+            _SIMILARITY_CAP = 3000
+
+            if len(_ids) < 3:
+                st.markdown(
+                    f'<div style="display:inline-block; margin:0.6rem 0 0.4rem 0; padding:0.3rem 0.9rem; '
+                    f'border-radius:999px; background-color:{_analytics_theme["primary"]}26; '
+                    f'color:{_analytics_theme["text"]}; font-size:0.85rem; font-weight:600;">'
+                    f'Index at least 3 images to run this analysis</div>',
+                    unsafe_allow_html=True,
+                )
+            elif len(_ids) > _SIMILARITY_CAP:
+                st.markdown(
+                    f'<div style="display:inline-block; margin:0.6rem 0 0.4rem 0; padding:0.3rem 0.9rem; '
+                    f'border-radius:999px; background-color:{_analytics_theme["primary"]}26; '
+                    f'color:{_analytics_theme["text"]}; font-size:0.85rem; font-weight:600;">'
+                    f'⚠️ Skipped — over {_SIMILARITY_CAP} images ({len(_ids)} indexed). '
+                    f'A full pairwise sweep at this size would use significant memory.</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                _sim_results = compute_similarity_analysis(_embeddings, top_n=3)
+                _all_filenames = [_get_filename(m) for m in _metadatas]
+                _all_paths = [m.get("image_path", "") for m in _metadatas]
+
+                def _show_thumb(idx: int, caption: str):
+                    """Show an image thumbnail with a themed caption underneath,
+                    falling back to a placeholder note if the file has moved/been deleted."""
+                    _path = _all_paths[idx]
+                    if os.path.exists(_path):
+                        st.image(_path, width='stretch')
+                    else:
+                        st.markdown(
+                            f'<div style="padding:1.5rem 0.5rem; text-align:center; '
+                            f'color:{_analytics_theme["text"]}; opacity:0.6; font-size:0.8rem;">'
+                            f'📁 file not found</div>',
+                            unsafe_allow_html=True,
+                        )
+                    st.markdown(
+                        f'<p style="color:{_analytics_theme["text"]}; margin:0; font-size:0.8rem; '
+                        f'text-align:center;">{caption}</p>',
+                        unsafe_allow_html=True,
+                    )
+
+                st.write("")
+                col_redundant, col_unique = st.columns(2)
+
+                with col_redundant:
+                    st.markdown("##### 🪞 Most Redundant Pairs")
+                    if not _sim_results["redundant_pairs"]:
+                        st.markdown("Nothing to show yet.")
+                    for i, j, sim in _sim_results["redundant_pairs"]:
+                        with st.container(border=True):
+                            st.markdown(
+                                f'<p style="color:{_analytics_theme["text"]}; margin:0 0 0.4rem 0; '
+                                f'font-weight:600;">{sim:.3f} similarity</p>',
+                                unsafe_allow_html=True,
+                            )
+                            thumb_a, thumb_b = st.columns(2)
+                            with thumb_a:
+                                _show_thumb(i, _all_filenames[i])
+                            with thumb_b:
+                                _show_thumb(j, _all_filenames[j])
+
+                with col_unique:
+                    st.markdown("##### 🦄 Most Unique Images")
+                    if not _sim_results["unique_images"]:
+                        st.markdown("Nothing to show yet.")
+                    for idx, avg_sim in _sim_results["unique_images"]:
+                        with st.container(border=True):
+                            st.markdown(
+                                f'<p style="color:{_analytics_theme["text"]}; margin:0 0 0.4rem 0; '
+                                f'font-weight:600;">{avg_sim:.3f} avg. similarity</p>',
+                                unsafe_allow_html=True,
+                            )
+                            _show_thumb(idx, _all_filenames[idx])
