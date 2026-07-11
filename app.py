@@ -21,6 +21,7 @@ Architecture note:
 # Without it, pretty much forced to use the CLI for all
 
 import os
+import tempfile
 from pathlib import Path
 
 import altair as alt
@@ -431,6 +432,70 @@ def index_images(data_dir: str, embedder: CLIPEmbedder, indexer: VectorIndexer) 
 
 
 # Search logic
+def _render_search_results(results: list, result_label: str) -> None:
+    """
+    Shared rendering logic for search results — same 3-column image grid
+    used by both text search (run_search) and reverse image search
+    (run_reverse_image_search), since a ChromaDB search result looks
+    identical either way; only the header label differs depending on how
+    the query vector was produced.
+
+    Takes in:
+
+        results:      List of result dicts from indexer.search()
+
+        result_label: Text appended after "N results " in the header,
+                      e.g. 'for "a photo of a cat"' or "similar to your uploaded image"
+    """
+    if not results:
+        st.info("No results found. Try a different query.")
+        return
+
+    st.markdown(f"**{len(results)} results** {result_label}")
+
+    # Render and display results as a responsive image grid:
+    # st.columns(n) splits the layout into n equal columns
+
+    # 3 columns so results display as a grid rather than a vertical list
+    # zip() pairs each result with a column (when results run out zip stops)
+    cols = st.columns(3)
+
+    st.write("")  # small breathing room before the grid
+
+    _filename_theme = DARK_THEME if st.session_state.get("dark_mode", False) else LIGHT_THEME
+
+    for i, result in enumerate(results):
+        col = cols[i % 3]  # cycle through columns: 0, 1, 2, 0, 1, 2 ...
+
+        with col:
+            # st.container(border=True) is a built-in Streamlit primitive that draws
+            # a subtle card outline — gives each result a "card" feel with no custom CSS
+            with st.container(border=True):
+                image_path = result["image_path"]
+
+                if os.path.exists(image_path):
+                    image = Image.open(image_path)
+
+                    # st.image() renders a PIL Image in the UI
+                    # `use_container_width=True` makes it fill the column width responsively
+                    st.image(image, width='stretch')  # display image
+                else:
+                    st.warning(f"Image not found on disk: `{image_path}`")
+
+                # Display filename and similarity score below each image (similar in main.py)
+                similarity = 1 - result["distance"]
+                filename   = result["metadata"].get("filename", Path(image_path).name)
+
+                # Rendered as themed markdown (not st.caption()) so the filename
+                # label follows dark/light mode instead of staying Streamlit's
+                # fixed caption gray, same fix as the other labels in this file.
+                st.markdown(
+                    f'<p style="color:{_filename_theme["text"]}; margin:0;"><strong>{filename}</strong></p>',
+                    unsafe_allow_html=True,
+                )
+                st.progress(min(max(similarity, 0.0), 1.0), text=f"Similarity: {similarity:.3f}")
+
+
 def run_search(query: str, top_k: int, embedder: CLIPEmbedder, indexer: VectorIndexer) -> None:
     """
     Embed a text query, search ChromaDB, and render results as an image grid
@@ -454,59 +519,70 @@ def run_search(query: str, top_k: int, embedder: CLIPEmbedder, indexer: VectorIn
     # wrap the search in with st.spinner("Searching..."):
     # tells website to show a loading animation so user knows app didnt crash
     with st.spinner("Searching..."):
-        
+
         # Embed query & search the index
         query_vector = embedder.embed_text(query)
         results      = indexer.search(query_vector, top_k=top_k)
 
-    if not results:
-        st.info("No results found. Try a different query.")
+    # Stored in session_state rather than rendered immediately — a plain
+    # st.button() only reports True on the exact rerun it was clicked on,
+    # so on the NEXT rerun (e.g. toggling dark/light mode, which reruns the
+    # whole script like any other widget interaction) that True resets to
+    # False and the results would otherwise vanish until Search is clicked
+    # again. Persisting them here means the always-executed render block
+    # below picks them back up on every rerun, theme toggle included.
+    st.session_state["last_search_results"] = results
+    st.session_state["last_search_label"] = f'for *"{query}"*'
+
+
+def run_reverse_image_search(
+    uploaded_file, top_k: int, embedder: CLIPEmbedder, indexer: VectorIndexer
+) -> None:
+    """
+    Reverse image search: embed an UPLOADED image (instead of a text query)
+    and find the most visually/semantically similar images already in the index.
+
+    embedder.embed_image() only accepts a file path on disk — it calls
+    Image.open(image_path) internally (see embedder.py) and has no
+    in-memory/bytes variant — so the Streamlit UploadedFile is written to a
+    temporary file first, then always cleaned up afterward (even if
+    embedding or search raises), rather than left behind in the OS temp dir.
+
+    Takes in:
+
+        uploaded_file: an UploadedFile object from st.file_uploader()
+
+        top_k:         Number of results to display
+
+        embedder:      Loaded CLIPEmbedder instance
+
+        indexer:       Connected VectorIndexer instance
+    """
+    if indexer.count() == 0:
+        st.warning("Your index is empty. Go to the **Index Images** tab and index a folder first.")
         return
 
-    st.markdown(f"**{len(results)} results** for *\"{query}\"*")
+    # Preserve the original file extension so the temp file still looks like
+    # a normal image file on disk (PIL infers format from content anyway,
+    # but this keeps things tidy and avoids a bare extension-less temp name)
+    suffix = Path(uploaded_file.name).suffix or ".jpg"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(uploaded_file.getvalue())
+        tmp_path = tmp.name
 
+    try:
+        with st.spinner("Searching..."):
+            query_vector = embedder.embed_image(tmp_path)
+            results      = indexer.search(query_vector, top_k=top_k)
+    finally:
+        # Always clean up the temp file, even if embedding/search raised
+        os.remove(tmp_path)
 
-    # Render and display results as a responsive image grid:
-    # st.columns(n) splits the layout into n equal columns
-
-    # 3 columns so results display as a grid rather than a vertical list
-    # zip() pairs each result with a column (when results run out zip stops)
-    cols = st.columns(3)
-
-    st.write("")  # small breathing room before the grid
-
-    _filename_theme = DARK_THEME if st.session_state.get("dark_mode", False) else LIGHT_THEME
-
-    for i, result in enumerate(results):
-        col = cols[i % 3]  # cycle through columns: 0, 1, 2, 0, 1, 2 ...
-
-        with col:
-            # st.container(border=True) is a built-in Streamlit primitive that draws
-            # a subtle card outline — gives each result a "card" feel with no custom CSS
-            with st.container(border=True):
-                image_path = result["image_path"]
-
-                if os.path.exists(image_path):
-                    image = Image.open(image_path) 
-
-                    # st.image() renders a PIL Image in the UI
-                    # `use_container_width=True` makes it fill the column width responsively
-                    st.image(image, width='stretch') # display image
-                else:
-                    st.warning(f"Image not found on disk: `{image_path}`")
-
-                # Display filename and similarity score below each image (similar in main.py)
-                similarity = 1 - result["distance"]
-                filename   = result["metadata"].get("filename", Path(image_path).name)
-
-                # Rendered as themed markdown (not st.caption()) so the filename
-                # label follows dark/light mode instead of staying Streamlit's
-                # fixed caption gray, same fix as the other labels in this file.
-                st.markdown(
-                    f'<p style="color:{_filename_theme["text"]}; margin:0;"><strong>{filename}</strong></p>',
-                    unsafe_allow_html=True,
-                )
-                st.progress(min(max(similarity, 0.0), 1.0), text=f"Similarity: {similarity:.3f}")
+    # Same reasoning as run_search() above — persist instead of rendering
+    # immediately, so results survive a rerun triggered by something
+    # unrelated (like the dark/light mode toggle).
+    st.session_state["last_search_results"] = results
+    st.session_state["last_search_label"] = "similar to your uploaded image"
 
 
 
@@ -626,32 +702,82 @@ tab_search, tab_index, tab_analytics = st.tabs(["🔎  Search", "📥  Index Ima
 with tab_search:
     st.write("")
 
-    # Put the input and button on one row so "search" reads as a single, clean action
-    # rather than a stacked form — a small but noticeable modernization
-    col_query, col_button = st.columns([5, 1], vertical_alignment="bottom")
+    # Toggle between the existing text-query flow and reverse image search —
+    # both ultimately just produce a query vector for indexer.search(), so
+    # they share the same result grid (_render_search_results()) below
+    search_mode = st.radio(
+        "Search mode",
+        ["🔎 Text", "🖼️ Image"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
 
-    with col_query:
-        query = st.text_input(
-            "Search your images",
-            placeholder="ex: a photo of a cat",
+    if search_mode == "🔎 Text":
+        # Put the input and button on one row so "search" reads as a single, clean action
+        # rather than a stacked form — a small but noticeable modernization
+        col_query, col_button = st.columns([5, 1], vertical_alignment="bottom")
+
+        with col_query:
+            query = st.text_input(
+                "Search your images",
+                placeholder="ex: a photo of a cat",
+                label_visibility="collapsed",
+            )
+
+        with col_button:
+            search_clicked = st.button("Search", type="primary", width='stretch')
+
+        st.write("")
+
+        # st.button() returns True only on the re-run triggered by a click
+
+        # Also trigger search if user presses Enter in the text input
+        # by checking if `query` is non-empty and the button was clicked
+        if search_clicked and query.strip():
+            embedder = load_embedder()
+            indexer  = load_indexer(index_dir)
+            run_search(query.strip(), top_k, embedder, indexer)
+        elif not query.strip():
+            st.info("💡 Enter a text query above and click **Search** to get started.")
+
+    else:  # "🖼️ Image" — reverse image search
+        uploaded_image = st.file_uploader(
+            "Upload an image to find similar ones",
+            # st.file_uploader wants extensions without the leading dot,
+            # unlike SUPPORTED_EXTENSIONS elsewhere in this file
+            type=sorted(ext.lstrip(".") for ext in SUPPORTED_EXTENSIONS),
             label_visibility="collapsed",
         )
 
-    with col_button:
-        search_clicked = st.button("Search", type="primary", width='stretch')
+        if uploaded_image is not None:
+            col_preview, col_button2 = st.columns([5, 1], vertical_alignment="center")
 
-    st.write("")
+            with col_preview:
+                st.image(uploaded_image, width=160)
 
-    # st.button() returns True only on the re-run triggered by a click
+            with col_button2:
+                image_search_clicked = st.button(
+                    "Search", type="primary", width='stretch', key="image_search_btn"
+                )
 
-    # Also trigger search if user presses Enter in the text input
-    # by checking if `query` is non-empty and the button was clicked
-    if search_clicked and query.strip():
-        embedder = load_embedder()
-        indexer  = load_indexer(index_dir)
-        run_search(query.strip(), top_k, embedder, indexer)
-    elif not query.strip():
-        st.info("💡 Enter a text query above and click **Search** to get started.")
+            st.write("")
+
+            if image_search_clicked:
+                embedder = load_embedder()
+                indexer  = load_indexer(index_dir)
+                run_reverse_image_search(uploaded_image, top_k, embedder, indexer)
+        else:
+            st.info("💡 Upload an image above and click **Search** to find similar ones.")
+
+    # Renders on every rerun (not just the one triggered by clicking
+    # Search) — this is what makes results survive switching dark/light
+    # mode instead of disappearing until Search is clicked again.
+    if "last_search_results" in st.session_state:
+        st.write("")
+        _render_search_results(
+            st.session_state["last_search_results"],
+            st.session_state["last_search_label"],
+        )
 
 # --- Index tab ---
 with tab_index:
