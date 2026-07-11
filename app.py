@@ -330,11 +330,15 @@ def compute_tsne_coords(embeddings: list) -> list:
 
 
 @st.cache_data(show_spinner="Running pairwise similarity analysis...")
-def compute_similarity_analysis(embeddings: list, top_n: int = 5) -> dict:
+def compute_similarity_analysis(embeddings: list, top_n: int = 5, density_percentile: float = 99.0) -> dict:
     """
     Full pairwise cosine similarity sweep across every indexed vector, used to find:
       - the most REDUNDANT pairs (near-duplicate images — highest similarity)
       - the most UNIQUE images (lowest average similarity to everything else)
+      - COLLECTION DENSITY hotspots (images with the most close neighbors —
+        i.e. the "cluster centers" that define your collection's dominant theme)
+      - SEMANTIC RANGE (a single number for how focused vs. diverse the whole
+        collection is, based on average distance from the collection's centroid)
 
     indexer.py's docstring notes embedder.py L2-normalizes every embedding to
     a unit vector, so cosine similarity simplifies to a plain dot product —
@@ -342,17 +346,33 @@ def compute_similarity_analysis(embeddings: list, top_n: int = 5) -> dict:
     correct even if that assumption ever drifts.
 
     Only needs numpy (already a dependency via pandas/streamlit) — no new
-    package required, unlike the t-SNE feature above.
+    package required, unlike the t-SNE feature above. All four analyses
+    share the same O(n²) similarity matrix rather than each recomputing it.
 
     Takes in:
-        embeddings: list of embedding vectors (one per indexed image)
-        top_n:      how many top pairs / outliers to return
+        embeddings:         list of embedding vectors (one per indexed image)
+        top_n:               how many top pairs / outliers / hotspots to return
+        density_percentile: how similar two images must be to count as
+                            "close neighbors" for the density/hotspot count —
+                            99.0 means the top 1% most-similar pairs in the
+                            WHOLE collection set the bar (so what counts as
+                            "close" adapts to how tight-knit this particular
+                            collection already is, rather than a fixed
+                            similarity cutoff that might be meaningless for
+                            a very focused or very diverse set of images)
 
     Returns a dict:
-        "redundant_pairs": list of (index_i, index_j, similarity) tuples,
-                            sorted most-similar first
-        "unique_images":   list of (index, avg_similarity) tuples,
-                            sorted least-similar-to-everything first
+        "redundant_pairs":  list of (index_i, index_j, similarity) tuples,
+                             sorted most-similar first
+        "unique_images":    list of (index, avg_similarity) tuples,
+                             sorted least-similar-to-everything first
+        "density_hotspots": list of (index, neighbor_count) tuples,
+                             sorted most-neighbors first
+        "density_threshold": the similarity score that counted as "close"
+                              for the density calculation above
+        "semantic_range":   dict with "avg_distance", "std_distance", and
+                             "centroid_coherence" describing the whole
+                             collection's overall focus vs. diversity
     """
     import numpy as np
 
@@ -379,6 +399,53 @@ def compute_similarity_analysis(embeddings: list, top_n: int = 5) -> dict:
         for pos in top_pair_positions
     ]
 
+    # --- Collection density hotspots ---
+    # Threshold = the similarity score at the given percentile across every
+    # off-diagonal pair — e.g. the 99th percentile means "however similar the
+    # top 1% closest pairs in THIS collection happen to be." Using a
+    # percentile rather than a fixed similarity number (like 0.9) means the
+    # bar for "close neighbor" scales to how tight-knit the collection
+    # already is, instead of silently finding zero hotspots in a very
+    # diverse collection or nearly everything in a very uniform one.
+    sim_matrix_no_diag = sim_matrix.copy()
+    np.fill_diagonal(sim_matrix_no_diag, -1.0)  # sentinel so self-similarity never counts as a "neighbor"
+    density_threshold = float(np.percentile(pair_sims, density_percentile))
+    neighbor_counts = (sim_matrix_no_diag >= density_threshold).sum(axis=1)
+    top_density_positions = np.argsort(neighbor_counts)[::-1][:top_n]
+    density_hotspots = [
+        (int(pos), int(neighbor_counts[pos])) for pos in top_density_positions
+    ]
+
+    # --- Semantic range (whole-collection focus vs. diversity) ---
+    # The centroid is just the average of every vector. Its own magnitude
+    # (before re-normalizing) is a free bonus signal: if every image points
+    # in roughly the same direction, the vectors reinforce each other and
+    # the average stays close to length 1; if they point in wildly
+    # different directions, they partially cancel out and the average
+    # shrinks toward 0 — so centroid length alone hints at overall
+    # collection coherence.
+    centroid = vectors.mean(axis=0)
+    centroid_magnitude = float(np.linalg.norm(centroid))
+    if centroid_magnitude > 0:
+        centroid_unit = centroid / centroid_magnitude
+        # cosine similarity of every vector to the centroid's direction —
+        # same "1 - similarity = distance" convention indexer.py already
+        # uses for search results, so this reads consistently with the rest
+        # of the app
+        similarity_to_centroid = vectors @ centroid_unit
+        distances_from_centroid = 1.0 - similarity_to_centroid
+    else:
+        # Centroid collapsed to the zero vector — only happens if the
+        # collection's vectors cancel out almost perfectly (maximally
+        # diverse), so treat every image as maximally far from center
+        distances_from_centroid = np.ones(n)
+
+    semantic_range = {
+        "avg_distance": float(distances_from_centroid.mean()),
+        "std_distance": float(distances_from_centroid.std()),
+        "centroid_coherence": centroid_magnitude,
+    }
+
     # --- Most unique images ---
     # Zero out the diagonal first so self-similarity (1.0) doesn't skew each
     # image's average similarity to the rest of the collection
@@ -389,7 +456,13 @@ def compute_similarity_analysis(embeddings: list, top_n: int = 5) -> dict:
         (int(pos), float(avg_similarity[pos])) for pos in most_unique_positions
     ]
 
-    return {"redundant_pairs": redundant_pairs, "unique_images": unique_images}
+    return {
+        "redundant_pairs": redundant_pairs,
+        "unique_images": unique_images,
+        "density_hotspots": density_hotspots,
+        "density_threshold": density_threshold,
+        "semantic_range": semantic_range,
+    }
 
 
 # Indexing logic
@@ -526,7 +599,7 @@ def _render_search_results(results: list, result_label: str) -> None:
                     image = Image.open(image_path)
 
                     # st.image() renders a PIL Image in the UI
-                    # `use_container_width=True` makes it fill the column width responsively
+                    # `width='stretch'` makes it fill the column width responsively
                     st.image(image, width='stretch')  # display image
                 else:
                     st.warning(f"Image not found on disk: `{image_path}`")
@@ -997,7 +1070,7 @@ with tab_analytics:
                 )
                 .properties(height=220)
             )
-            st.altair_chart(_ext_chart, use_container_width=True)
+            st.altair_chart(_ext_chart, width='stretch')
 
         st.write("")
 
@@ -1043,7 +1116,7 @@ with tab_analytics:
                         )
                         .properties(height=280)
                     )
-                    st.altair_chart(_scatter, use_container_width=True)
+                    st.altair_chart(_scatter, width='stretch')
                 except ModuleNotFoundError:
                     st.error(
                         "This needs scikit-learn, which isn't installed. Run "
@@ -1058,8 +1131,10 @@ with tab_analytics:
             st.markdown("#### 🧬 Vector Metadata Analysis")
             st.markdown(
                 "A full pairwise cosine similarity sweep across every indexed vector — "
-                "surfaces near-duplicate images worth cleaning up, and outliers that "
-                "look unlike anything else in the collection."
+                "surfaces near-duplicate images worth cleaning up, outliers that look "
+                "unlike anything else in the collection, dense \"hotspot\" clusters that "
+                "define your collection's dominant theme, and how focused vs. diverse "
+                "the whole collection is overall."
             )
 
             # O(n²) memory/compute — trivial for a personal collection of a
@@ -1091,6 +1166,33 @@ with tab_analytics:
                 _all_filenames = [_get_filename(m) for m in _metadatas]
                 _all_paths = [m.get("image_path", "") for m in _metadatas]
 
+                # --- Semantic Range: a single number for how focused vs.
+                # diverse the WHOLE collection is (as opposed to the other
+                # three analyses below, which are all about specific images) ---
+                _srange = _sim_results["semantic_range"]
+                st.write("")
+                st.markdown("##### 🌐 Semantic Range")
+                st.markdown(
+                    "How focused vs. diverse this collection is overall, based on "
+                    "each image's distance from the collection's average vector "
+                    "(its \"centroid\"). A small average distance means a tightly "
+                    "focused collection (e.g. all landscape shots); a large one "
+                    "means a broad mix (e.g. food, architecture, pets, all together)."
+                )
+                range_col1, range_col2, range_col3 = st.columns(3)
+                with range_col1:
+                    st.metric("Avg. distance from center", f"{_srange['avg_distance']:.3f}")
+                with range_col2:
+                    st.metric("Spread (std. dev)", f"{_srange['std_distance']:.3f}")
+                with range_col3:
+                    # Free bonus signal from the same centroid calculation —
+                    # see the docstring in compute_similarity_analysis() for
+                    # why an unnormalized centroid's own length says
+                    # something about how tightly the vectors agree
+                    st.metric("Centroid coherence", f"{_srange['centroid_coherence']:.3f}")
+
+                st.write("")
+
                 def _show_thumb(idx: int, caption: str):
                     """Show an image thumbnail with a themed caption underneath,
                     falling back to a placeholder note if the file has moved/been deleted."""
@@ -1110,8 +1212,7 @@ with tab_analytics:
                         unsafe_allow_html=True,
                     )
 
-                st.write("")
-                col_redundant, col_unique = st.columns(2)
+                col_redundant, col_unique, col_density = st.columns(3)
 
                 with col_redundant:
                     st.markdown("##### 🪞 Most Redundant Pairs")
@@ -1139,6 +1240,20 @@ with tab_analytics:
                             st.markdown(
                                 f'<p style="color:{_analytics_theme["text"]}; margin:0 0 0.4rem 0; '
                                 f'font-weight:600;">{avg_sim:.3f} avg. similarity</p>',
+                                unsafe_allow_html=True,
+                            )
+                            _show_thumb(idx, _all_filenames[idx])
+
+                with col_density:
+                    st.markdown("##### 🔥 Collection Hotspots")
+                    if not _sim_results["density_hotspots"]:
+                        st.markdown("Nothing to show yet.")
+                    for idx, neighbor_count in _sim_results["density_hotspots"]:
+                        with st.container(border=True):
+                            st.markdown(
+                                f'<p style="color:{_analytics_theme["text"]}; margin:0 0 0.4rem 0; '
+                                f'font-weight:600;">{neighbor_count} close neighbor'
+                                f'{"s" if neighbor_count != 1 else ""}</p>',
                                 unsafe_allow_html=True,
                             )
                             _show_thumb(idx, _all_filenames[idx])
