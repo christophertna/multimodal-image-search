@@ -267,3 +267,151 @@ def test_reset_clears_collection(temp_indexer):
 
     assert temp_indexer.count() == 0, \
         "After reset(), collection should be empty"
+
+
+# New tests
+@pytest.fixture
+def temp_dir():
+    """
+    Yields a bare temp directory path (not yet a VectorIndexer) — used by
+    the persistence tests below, which need to create MULTIPLE
+    VectorIndexer instances pointing at the SAME directory to simulate an
+    app restart. The temp_indexer fixture above can't be reused for this
+    since it only ever wraps a single indexer instance.
+    """
+    temp_dir = tempfile.mkdtemp()
+    yield temp_dir
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# Persistence across restarts
+def test_persists_across_reconnect(temp_dir):
+    """Data added via one VectorIndexer instance should still be there
+    when a NEW instance is created pointing at the same persist_dir —
+    simulates closing and reopening the app."""
+    first = VectorIndexer(persist_dir=temp_dir, collection_name="test_collection")
+    embedding = make_random_embedding()
+    first.add(embedding, "./data/images/cat.jpg", metadata={"category": "animals"})
+    assert first.count() == 1
+
+    # Brand new instance, same directory — simulates an app restart
+    second = VectorIndexer(persist_dir=temp_dir, collection_name="test_collection")
+    assert second.count() == 1, \
+        "A new VectorIndexer pointed at the same persist_dir should see previously stored data"
+
+    results = second.search(embedding, top_k=1)
+    assert results[0]["image_path"] == "./data/images/cat.jpg"
+    assert results[0]["metadata"]["category"] == "animals"
+
+
+def test_reconnect_with_different_collection_name_is_isolated(temp_dir):
+    """Two collections in the SAME persist_dir but with different names
+    should not see each other's data — collections are meant to be
+    independent 'tables', per indexer.py's own architecture note."""
+    indexer_a = VectorIndexer(persist_dir=temp_dir, collection_name="collection_a")
+    indexer_a.add(make_random_embedding(), "./data/images/a.jpg")
+
+    indexer_b = VectorIndexer(persist_dir=temp_dir, collection_name="collection_b")
+    assert indexer_b.count() == 0, \
+        "A differently-named collection in the same persist_dir should start empty"
+
+
+# --- search()'s filter parameter ---
+def test_search_filter_restricts_results(temp_indexer):
+    """search() with a `filter` (metadata where-clause) should only return
+    documents matching that filter, even if closer matches exist outside it."""
+    target = make_random_embedding()
+    temp_indexer.add(target, "./data/images/cat.jpg", metadata={"category": "animals"})
+    temp_indexer.add(target, "./data/images/car.jpg", metadata={"category": "vehicles"})
+
+    results = temp_indexer.search(
+        target, top_k=5, filter={"category": {"$eq": "animals"}}
+    )
+
+    assert len(results) == 1
+    assert results[0]["image_path"] == "./data/images/cat.jpg"
+
+
+def test_search_filter_matching_nothing_returns_empty(temp_indexer):
+    """A filter that matches no documents should return an empty list,
+    not raise an error."""
+    temp_indexer.add(make_random_embedding(), "./data/images/cat.jpg", metadata={"category": "animals"})
+
+    results = temp_indexer.search(
+        make_random_embedding(), top_k=5, filter={"category": {"$eq": "nonexistent"}}
+    )
+
+    assert results == []
+
+
+# --- add_batch() gaps ---
+def test_add_batch_is_idempotent(temp_indexer):
+    """Running add_batch() twice with the same paths should upsert, not
+    duplicate — only single add() idempotency was tested previously, but
+    app.py's index_images() always calls add_batch(), so THAT'S the path
+    that actually needs to be idempotency-safe for re-indexing to work."""
+    embeddings = [make_random_embedding() for _ in range(3)]
+    paths = [f"./data/images/img_{i}.jpg" for i in range(3)]
+
+    temp_indexer.add_batch(embeddings, paths)
+    temp_indexer.add_batch(embeddings, paths)  # same paths again
+
+    assert temp_indexer.count() == 3, \
+        "Re-running add_batch() on the same paths should upsert, not duplicate"
+
+
+def test_add_batch_without_metadata(temp_indexer):
+    """add_batch() should work with metadatas=None (the default) and still
+    store image_path for each entry."""
+    embeddings = [make_random_embedding() for _ in range(2)]
+    paths = ["./data/images/a.jpg", "./data/images/b.jpg"]
+
+    ids = temp_indexer.add_batch(embeddings, paths)  # no metadatas argument
+
+    stored = temp_indexer.collection.get(ids=ids, include=["metadatas"])
+    stored_paths = {m["image_path"] for m in stored["metadatas"]}
+    assert stored_paths == set(paths)
+
+
+def test_add_batch_empty_lists_raises(temp_indexer):
+    """
+    add_batch([], []) currently raises ValueError rather than gracefully
+    no-op'ing (discovered while writing this test, not the assumed ideal
+    behavior). app.py's index_images() never hits this path today, since
+    it already guards against empty folders before ever calling
+    add_batch() — but the indexer's own public API isn't safe against
+    being called this way directly. Worth an early-return guard in
+    indexer.py if add_batch([], []) should no-op instead; this test just
+    pins down what it currently does so a future change is a deliberate
+    choice, not a silent regression either way.
+    """
+    with pytest.raises(ValueError):
+        temp_indexer.add_batch([], [])
+
+
+# --- search() top_k edge case ---
+def test_search_top_k_exceeds_collection_size(temp_indexer):
+    """Requesting more results than exist in the collection should return
+    whatever IS available, not raise an error or hang."""
+    for i in range(3):
+        temp_indexer.add(make_random_embedding(), f"./data/images/img_{i}.jpg")
+
+    results = temp_indexer.search(make_random_embedding(), top_k=10)
+
+    assert len(results) == 3, "Should return all 3 available results, not error on top_k > count"
+
+
+# --- _random_id() (previously untested) ---
+def test_random_id_returns_string():
+    """_random_id() should return a non-empty string (a UUID)."""
+    result = VectorIndexer._random_id()
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+def test_random_id_is_unique_across_calls():
+    """Repeated calls to _random_id() should not produce the same value —
+    unlike _path_to_id() (deterministic by design), this one MUST vary,
+    since it exists specifically for cases with no stable path to hash."""
+    ids = {VectorIndexer._random_id() for _ in range(100)}
+    assert len(ids) == 100, "Every call should produce a distinct ID"
