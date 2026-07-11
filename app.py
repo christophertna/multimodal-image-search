@@ -161,7 +161,17 @@ def apply_theme(dark: bool) -> None:
            against a dark background since it never lightens with the mode. */
         [data-testid="stTabs"] [role="tablist"]::after {{
             background-color: {theme["border"]} !important;
-            opacity: 0.3;
+            opacity: 0.5;
+        }}
+        /* Streamlit 1.58.x doesn't use a ::after pseudo-element for the tab
+           bar line at all — it's a real DOM element,
+           div[data-baseweb="tab-border"], hardcoded to rgba(49, 51, 63, 0.1)
+           in BOTH light and dark mode (confirmed via live DOM inspection
+           against the actual installed 1.58.0), which is why it read as
+           "disappearing" against a dark background specifically. */
+        [data-baseweb="tab-border"] {{
+            background-color: {theme["border"]} !important;
+            opacity: 0.5 !important;
         }}
         [data-testid="stVerticalBlock"] {{
             border-color: {theme["border"]} !important;
@@ -214,6 +224,45 @@ def apply_theme(dark: bool) -> None:
            to move with dark/light mode too. */
         .react-aria-SelectionIndicator {{
             background-color: {theme["primary"]} !important;
+        }}
+        /* Radio option labels (e.g. the "🔎 Text" / "🖼️ Image" search mode
+           toggle) — confirmed via live DOM inspection stuck at Streamlit's
+           fixed rgb(49, 51, 63) regardless of theme. */
+        [data-testid="stRadioOption"],
+        [data-testid="stRadioOption"] p {{
+            color: {theme["text"]} !important;
+        }}
+        /* Streamlit 1.58.x renders radio options via BaseWeb
+           (label[data-baseweb="radio"]) rather than the React Aria
+           structure used in 1.59+ (stRadioOption doesn't exist there) —
+           confirmed via live testing against the actual installed 1.58.0.
+           Kept alongside the rule above rather than replacing it, since
+           which one actually matches depends on the installed version. */
+        label[data-baseweb="radio"],
+        label[data-baseweb="radio"] p {{
+            color: {theme["text"]} !important;
+        }}
+        /* File uploader: the dropzone box, its "Upload" button, and the
+           "200MB per file..." hint text are ALL fixed-color by default and
+           untouched by the primary-button theming above, since this is a
+           "secondary" kind button, not "primary". Confirmed via live DOM
+           inspection this was literally white text on a white background
+           in dark mode — hence "Upload" being invisible. */
+        [data-testid="stFileUploaderDropzone"] {{
+            background-color: {theme["secondary_background"]} !important;
+        }}
+        [data-testid="stFileUploaderDropzoneInstructions"],
+        [data-testid="stFileUploaderDropzoneInstructions"] span {{
+            color: {theme["text"]} !important;
+        }}
+        button[data-testid="stBaseButton-secondary"] {{
+            background-color: {theme["secondary_background"]} !important;
+            border-color: {theme["border"]} !important;
+            color: {theme["text"]} !important;
+        }}
+        button[data-testid="stBaseButton-secondary"] p,
+        button[data-testid="stBaseButton-secondary"] span {{
+            color: {theme["text"]} !important;
         }}
         .stButton > button[kind="primary"],
         .stButton > button[data-testid="stBaseButton-primary"],
