@@ -207,3 +207,139 @@ def test_text_and_image_same_space(embedder, sample_image_path):
         "Text and image embeddings must have the same shape for cosine similarity"
     assert text_vec.dtype == image_vec.dtype, \
         "Text and image embeddings must have the same dtype"
+
+
+# ============================================================
+# Additional coverage — added on top of the original smoke tests above,
+# same "load the real model, no mocking" philosophy as the rest of this
+# file (per this file's own docstring: it's fine to lean on the real
+# model here since correctness of OUR wrapper is what's under test, not
+# CLIP's own accuracy).
+#
+# Gaps identified in the original suite:
+#   - No test that embeddings are deterministic (same input -> same
+#     output every time — confirms the model is truly in eval mode with
+#     no leftover randomness like dropout)
+#   - No test of embed_image() on a non-RGB image, despite embedder.py
+#     explicitly calling .convert("RGB") to handle exactly that case
+#   - No test of text longer than CLIP's 77-token limit, despite
+#     truncation=True being explicitly set in the processor call
+#   - No test of an empty string as input
+#   - No test that the model's weights actually live on the device
+#     embedder.device claims (only embedder.device itself was checked,
+#     not that .to(device) actually took effect)
+#   - No test that embeddings carry any actual semantic meaning — every
+#     existing test only checks shape/dtype/normalization, which would
+#     all still pass even if the encoders were silently swapped or
+#     returned garbage that happened to be the right shape
+# ============================================================
+
+def test_embed_text_is_deterministic(embedder):
+    """
+    Calling embed_text() twice with the identical input should produce
+    identical output — the model is in eval() mode (see embedder.py's
+    __init__), so there should be zero randomness (no dropout, etc.)
+    left active during inference.
+    """
+    vec1 = embedder.embed_text("a photo of a mountain")
+    vec2 = embedder.embed_text("a photo of a mountain")
+    assert torch.allclose(vec1, vec2), \
+        "Same text input should always produce the same embedding (model should be fully deterministic in eval mode)"
+
+
+def test_embed_image_is_deterministic(embedder, sample_image_path):
+    """Same as above, but for embed_image()."""
+    vec1 = embedder.embed_image(sample_image_path)
+    vec2 = embedder.embed_image(sample_image_path)
+    assert torch.allclose(vec1, vec2), \
+        "Same image input should always produce the same embedding"
+
+
+def test_embed_image_handles_non_rgb(embedder, tmp_path):
+    """
+    embed_image() should work on non-RGB images (grayscale, RGBA, etc.),
+    not just plain RGB — embedder.py explicitly calls .convert("RGB") for
+    exactly this reason, but nothing in the original suite actually
+    exercises that line with a non-RGB source image.
+    """
+    grayscale_path = tmp_path / "grayscale.jpg"
+    Image.new("L", (224, 224), 128).save(grayscale_path)  # "L" = 8-bit grayscale
+
+    result = embedder.embed_image(str(grayscale_path))
+
+    assert result.shape == torch.Size([512])
+    assert abs(torch.norm(result).item() - 1.0) < 1e-6
+
+
+def test_embed_text_handles_long_text(embedder):
+    """
+    CLIP's tokenizer has a hard 77-token limit. embedder.py sets
+    truncation=True specifically to avoid crashing on longer input, but
+    that line was never actually exercised by any existing test — every
+    example text query so far has been a short handful of words.
+    """
+    long_text = "a photo of " + "a very large mountain landscape with trees and rivers and clouds " * 20
+    result = embedder.embed_text(long_text)
+
+    assert result.shape == torch.Size([512])
+    assert abs(torch.norm(result).item() - 1.0) < 1e-6
+
+
+def test_embed_text_handles_empty_string(embedder):
+    """An empty string is a valid (if degenerate) input — should not crash,
+    should still return a properly-shaped, normalized vector."""
+    result = embedder.embed_text("")
+    assert result.shape == torch.Size([512])
+    assert abs(torch.norm(result).item() - 1.0) < 1e-6
+
+
+def test_model_weights_on_correct_device(embedder):
+    """
+    embedder.device reports where things SHOULD be, but nothing actually
+    confirms the model's weights were moved there — if .to(self.device)
+    were accidentally dropped from __init__, embedder.device would still
+    report correctly while the model silently stayed on its default
+    device. Checking an actual parameter's device closes that gap.
+    """
+    model_device = next(embedder.model.parameters()).device
+    assert model_device.type == embedder.device.type, \
+        f"Model parameters live on {model_device} but embedder.device claims {embedder.device}"
+
+
+def test_cross_modal_semantic_similarity(embedder, tmp_path):
+    """
+    The most important property CLIP is actually supposed to have: a
+    text description should be MORE similar to an image that matches it
+    than to one that doesn't. Every other test in this file only checks
+    shape/dtype/normalization — all of which would still pass even if the
+    text and image encoders were silently swapped, or returned
+    plausible-looking noise. This is the one test that would actually
+    catch that class of bug.
+
+    NOTE: solid-color synthetic images are a somewhat artificial,
+    out-of-distribution input for a model trained on natural photos —
+    this should still pass reliably given how strong CLIP's color/concept
+    association is, but if it ever flakes, swapping in real photos (e.g.
+    an actual photo of the sky vs. an actual photo of grass) instead of
+    flat color swatches would be a more realistic, even safer bet.
+    """
+    red_path = tmp_path / "red.jpg"
+    blue_path = tmp_path / "blue.jpg"
+    Image.new("RGB", (224, 224), (220, 20, 20)).save(red_path)
+    Image.new("RGB", (224, 224), (20, 20, 220)).save(blue_path)
+
+    red_image_vec = embedder.embed_image(str(red_path))
+    blue_image_vec = embedder.embed_image(str(blue_path))
+    red_text_vec = embedder.embed_text("a photo of the color red")
+    blue_text_vec = embedder.embed_text("a photo of the color blue")
+
+    # Both vectors are already unit-normalized, so dot product == cosine similarity
+    red_text_to_red_image = torch.dot(red_text_vec, red_image_vec).item()
+    red_text_to_blue_image = torch.dot(red_text_vec, blue_image_vec).item()
+    blue_text_to_blue_image = torch.dot(blue_text_vec, blue_image_vec).item()
+    blue_text_to_red_image = torch.dot(blue_text_vec, red_image_vec).item()
+
+    assert red_text_to_red_image > red_text_to_blue_image, \
+        "'a photo of the color red' should be more similar to a red image than a blue one"
+    assert blue_text_to_blue_image > blue_text_to_red_image, \
+        "'a photo of the color blue' should be more similar to a blue image than a red one"
