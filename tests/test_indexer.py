@@ -270,6 +270,7 @@ def test_reset_clears_collection(temp_indexer):
 
 
 # New tests
+
 @pytest.fixture
 def temp_dir():
     """
@@ -294,7 +295,7 @@ def test_persists_across_reconnect(temp_dir):
     first.add(embedding, "./data/images/cat.jpg", metadata={"category": "animals"})
     assert first.count() == 1
 
-    # Brand new instance, same directory — simulates an app restart
+    # Brand new instance, same directory, simulates an app restart
     second = VectorIndexer(persist_dir=temp_dir, collection_name="test_collection")
     assert second.count() == 1, \
         "A new VectorIndexer pointed at the same persist_dir should see previously stored data"
@@ -316,7 +317,7 @@ def test_reconnect_with_different_collection_name_is_isolated(temp_dir):
         "A differently-named collection in the same persist_dir should start empty"
 
 
-# --- search()'s filter parameter ---
+# search()'s filter parameter 
 def test_search_filter_restricts_results(temp_indexer):
     """search() with a `filter` (metadata where-clause) should only return
     documents matching that filter, even if closer matches exist outside it."""
@@ -344,7 +345,7 @@ def test_search_filter_matching_nothing_returns_empty(temp_indexer):
     assert results == []
 
 
-# --- add_batch() gaps ---
+# add_batch() gaps 
 def test_add_batch_is_idempotent(temp_indexer):
     """Running add_batch() twice with the same paths should upsert, not
     duplicate — only single add() idempotency was tested previously, but
@@ -389,7 +390,7 @@ def test_add_batch_empty_lists_raises(temp_indexer):
         temp_indexer.add_batch([], [])
 
 
-# --- search() top_k edge case ---
+# search() top_k edge case 
 def test_search_top_k_exceeds_collection_size(temp_indexer):
     """Requesting more results than exist in the collection should return
     whatever IS available, not raise an error or hang."""
@@ -401,7 +402,7 @@ def test_search_top_k_exceeds_collection_size(temp_indexer):
     assert len(results) == 3, "Should return all 3 available results, not error on top_k > count"
 
 
-# --- _random_id() (previously untested) ---
+# random_id() 
 def test_random_id_returns_string():
     """_random_id() should return a non-empty string (a UUID)."""
     result = VectorIndexer._random_id()

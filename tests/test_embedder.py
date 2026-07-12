@@ -207,32 +207,21 @@ def test_text_and_image_same_space(embedder, sample_image_path):
         "Text and image embeddings must have the same shape for cosine similarity"
     assert text_vec.dtype == image_vec.dtype, \
         "Text and image embeddings must have the same dtype"
-
-
-# ============================================================
-# Additional coverage — added on top of the original smoke tests above,
-# same "load the real model, no mocking" philosophy as the rest of this
-# file (per this file's own docstring: it's fine to lean on the real
-# model here since correctness of OUR wrapper is what's under test, not
-# CLIP's own accuracy).
-#
-# Gaps identified in the original suite:
-#   - No test that embeddings are deterministic (same input -> same
-#     output every time — confirms the model is truly in eval mode with
+    
+# New tests that werent covered earlier:
+#   - Embeddings are deterministic (same input -> same
+#     output every time which confirms the model is truly in eval mode with
 #     no leftover randomness like dropout)
-#   - No test of embed_image() on a non-RGB image, despite embedder.py
+#   - embed_image() on a non-RGB image, despite embedder.py
 #     explicitly calling .convert("RGB") to handle exactly that case
-#   - No test of text longer than CLIP's 77-token limit, despite
+#   - Text longer than model limit (than CLIP's 77-token limit), despite
 #     truncation=True being explicitly set in the processor call
-#   - No test of an empty string as input
-#   - No test that the model's weights actually live on the device
-#     embedder.device claims (only embedder.device itself was checked,
-#     not that .to(device) actually took effect)
-#   - No test that embeddings carry any actual semantic meaning — every
+#   - Empty string as input
+#   - Model's weights live on the device
+#   - Embeddings carry any actual semantic meaning, every
 #     existing test only checks shape/dtype/normalization, which would
 #     all still pass even if the encoders were silently swapped or
 #     returned garbage that happened to be the right shape
-# ============================================================
 
 def test_embed_text_is_deterministic(embedder):
     """
