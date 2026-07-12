@@ -38,6 +38,27 @@ DEFAULT_INDEX_DIR = "./index"
 DEFAULT_DATA_DIR  = "./data/images"
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
+# Generic category prompts used by the "Cross-Modal Bridge" analytics
+# feature to test how well CLIP can describe each indexed image with a
+# common, everyday label. Deliberately broad-coverage (people, nature,
+# objects, food, etc.) rather than narrow/niche, since the point is to
+# catch images that don't fit ANY common category well — not to test
+# recognition of one specific subject.
+CROSS_MODAL_PROMPTS = (
+    "a photo of a person",
+    "a photo of a group of people",
+    "a photo of an animal",
+    "a photo of food",
+    "a photo of a building or architecture",
+    "a photo of nature or a landscape",
+    "a photo of a vehicle",
+    "a photo of technology or electronics",
+    "a photo of text or a document",
+    "a photo of art or a drawing",
+    "a close-up photo of an object",
+    "an abstract or pattern image",
+)
+
 # Light/dark palettes for the sidebar theme toggle.
 # `config.toml` only sets the theme ONCE at startup, so to let the user flip
 # modes live from a widget we override colors ourselves with a small <style>
@@ -463,6 +484,69 @@ def compute_similarity_analysis(embeddings: list, top_n: int = 5, density_percen
         "density_threshold": density_threshold,
         "semantic_range": semantic_range,
     }
+
+
+@st.cache_data(show_spinner="Testing images against text prompts...")
+def compute_cross_modal_scores(embeddings: list, prompts: tuple, top_n: int = 3) -> list:
+    """
+    "Cross-Modal Bridge" analysis: for each indexed image, test its
+    similarity against a fixed set of generic category prompts (see
+    CROSS_MODAL_PROMPTS) and find its single BEST-matching prompt. Images
+    whose best match is still a weak score are ones CLIP can't confidently
+    describe with any common, everyday label — useful as a rough quality-
+    control signal for abstract, blurry, or hard-to-classify images.
+
+    Unlike compute_similarity_analysis() above (pure image-to-image, no
+    model needed since it just reuses the vectors already sitting in
+    ChromaDB), this needs actual TEXT embeddings — so it calls
+    load_embedder() itself internally. That's a deliberate choice: passing
+    the embedder object in as a parameter would defeat @st.cache_data
+    (which needs hashable args), and load_embedder() is already
+    @st.cache_resource-cached elsewhere in this file, so calling it here
+    is cheap after the first real load — it does NOT reload the model.
+
+    Takes in:
+        embeddings: list of embedding vectors (one per indexed image)
+        prompts:    tuple of text prompts to test against (a tuple, not a
+                    list, since @st.cache_data needs a hashable argument)
+        top_n:      how many of the WORST (lowest best-match) images to return
+
+    Returns a list of (index, best_prompt, best_score) tuples, sorted
+    weakest-match first.
+    """
+    import numpy as np
+
+    embedder = load_embedder()
+
+    image_vectors = np.array(embeddings, dtype=np.float64)
+    image_norms = np.linalg.norm(image_vectors, axis=1, keepdims=True)
+    image_norms[image_norms == 0] = 1
+    image_vectors = image_vectors / image_norms
+
+    # Embed every prompt once, up front — embed_text() returns an
+    # already-normalized torch.Tensor per indexer.py's docstring, but
+    # re-normalized here anyway for the same "cheap insurance" reason as
+    # compute_similarity_analysis() above
+    prompt_vectors = np.array([embedder.embed_text(p).detach().cpu().numpy() for p in prompts])
+    prompt_norms = np.linalg.norm(prompt_vectors, axis=1, keepdims=True)
+    prompt_norms[prompt_norms == 0] = 1
+    prompt_vectors = prompt_vectors / prompt_norms
+
+    # image_vectors @ prompt_vectors.T is (n_images x n_prompts) — entry
+    # [i, j] is the cosine similarity between image i and prompt j
+    sim_matrix = image_vectors @ prompt_vectors.T
+
+    best_prompt_idx = sim_matrix.argmax(axis=1)
+    best_scores = sim_matrix.max(axis=1)
+
+    # Images with the WEAKEST best-match score first — these are the ones
+    # that don't fit comfortably into ANY of the tested categories
+    weakest_positions = np.argsort(best_scores)[:top_n]
+
+    return [
+        (int(pos), prompts[int(best_prompt_idx[pos])], float(best_scores[pos]))
+        for pos in weakest_positions
+    ]
 
 
 # Indexing logic
@@ -962,7 +1046,7 @@ with tab_index:
                 # Used here so the sidebar metric updates right after indexing completes
                 st.rerun()  
 
-# --- Analytics tab ---
+# Analytics tab
 with tab_analytics:
     st.write("")
     _analytics_theme = DARK_THEME if dark_mode else LIGHT_THEME
@@ -992,7 +1076,7 @@ with tab_analytics:
         _metadatas  = _all_data.get("metadatas", [])
         _embeddings = _all_data.get("embeddings", [])
 
-        # --- Stat cards: total indexed + total storage on disk ---
+        # Stat cards: total indexed + total storage on disk 
         # Storage is measured from the actual files in data_dir (not the
         # vectors themselves, which are tiny) so it reflects the real
         # disk footprint of the image collection being indexed
@@ -1049,7 +1133,7 @@ with tab_analytics:
                 )
             )
 
-        # --- File extension breakdown (bar chart) ---
+        # File extension breakdown (bar chart) 
         with st.container(border=True):
             st.markdown("#### 🗃️ File Types")
             _ext_counts: dict = {}
@@ -1074,7 +1158,7 @@ with tab_analytics:
 
         st.write("")
 
-        # --- t-SNE 2D projection of the CLIP embeddings ---
+        # t-SNE 2D projection of the CLIP embeddings
         with st.container(border=True):
             st.markdown("#### 🧠 How CLIP Sees Your Images")
             st.markdown(
@@ -1103,7 +1187,7 @@ with tab_analytics:
                         "type": _exts,
                     })
 
-                    # Height dropped from 420 to 280 — the container was
+                    # Height dropped from 420 to 280, container was
                     # noticeably oversized for what it actually shows
                     _scatter = _themed(
                         alt.Chart(_proj_df)
@@ -1126,7 +1210,7 @@ with tab_analytics:
 
         st.write("")
 
-        # --- Vector metadata analysis: redundant pairs + outliers ---
+        # Vector metadata analysis: redundant pairs + outliers 
         with st.container(border=True):
             st.markdown("#### 🧬 Vector Metadata Analysis")
             st.markdown(
@@ -1137,7 +1221,7 @@ with tab_analytics:
                 "the whole collection is overall."
             )
 
-            # O(n²) memory/compute — trivial for a personal collection of a
+            # O(n²) memory/compute, trivial for a personal collection of a
             # few thousand images (numpy handles this in well under a
             # second), but a full similarity matrix for tens of thousands of
             # images would start to use real memory, so this is capped
@@ -1166,30 +1250,31 @@ with tab_analytics:
                 _all_filenames = [_get_filename(m) for m in _metadatas]
                 _all_paths = [m.get("image_path", "") for m in _metadatas]
 
-                # --- Semantic Range: a single number for how focused vs.
+                # Semantic Range: a single number for how focused vs.
                 # diverse the WHOLE collection is (as opposed to the other
-                # three analyses below, which are all about specific images) ---
+                # analyses below, which are all about specific images)
                 _srange = _sim_results["semantic_range"]
                 st.write("")
-                st.markdown("##### 🌐 Semantic Range")
-                st.markdown(
-                    "How focused vs. diverse this collection is overall, based on "
-                    "each image's distance from the collection's average vector "
-                    "(its \"centroid\"). A small average distance means a tightly "
-                    "focused collection (e.g. all landscape shots); a large one "
-                    "means a broad mix (e.g. food, architecture, pets, all together)."
-                )
-                range_col1, range_col2, range_col3 = st.columns(3)
-                with range_col1:
-                    st.metric("Avg. distance from center", f"{_srange['avg_distance']:.3f}")
-                with range_col2:
-                    st.metric("Spread (std. dev)", f"{_srange['std_distance']:.3f}")
-                with range_col3:
-                    # Free bonus signal from the same centroid calculation —
-                    # see the docstring in compute_similarity_analysis() for
-                    # why an unnormalized centroid's own length says
-                    # something about how tightly the vectors agree
-                    st.metric("Centroid coherence", f"{_srange['centroid_coherence']:.3f}")
+                with st.container(border=True):
+                    st.markdown("##### 🌐 Semantic Range")
+                    st.markdown(
+                        "How focused vs. diverse this collection is overall, based on "
+                        "each image's distance from the collection's average vector "
+                        "(its \"centroid\"). A small average distance means a tightly "
+                        "focused collection (e.g. all landscape shots); a large one "
+                        "means a broad mix (e.g. food, architecture, pets, all together)."
+                    )
+                    range_col1, range_col2, range_col3 = st.columns(3)
+                    with range_col1:
+                        st.metric("Avg. distance from center", f"{_srange['avg_distance']:.3f}")
+                    with range_col2:
+                        st.metric("Spread (std. dev)", f"{_srange['std_distance']:.3f}")
+                    with range_col3:
+                        # Free bonus signal from the same centroid calculation —
+                        # see the docstring in compute_similarity_analysis() for
+                        # why an unnormalized centroid's own length says
+                        # something about how tightly the vectors agree
+                        st.metric("Centroid coherence", f"{_srange['centroid_coherence']:.3f}")
 
                 st.write("")
 
@@ -1212,48 +1297,82 @@ with tab_analytics:
                         unsafe_allow_html=True,
                     )
 
-                col_redundant, col_unique, col_density = st.columns(3)
+                with st.container(border=True):
+                    col_redundant, col_unique, col_density = st.columns(3)
 
-                with col_redundant:
-                    st.markdown("##### 🪞 Most Redundant Pairs")
-                    if not _sim_results["redundant_pairs"]:
-                        st.markdown("Nothing to show yet.")
-                    for i, j, sim in _sim_results["redundant_pairs"]:
-                        with st.container(border=True):
-                            st.markdown(
-                                f'<p style="color:{_analytics_theme["text"]}; margin:0 0 0.4rem 0; '
-                                f'font-weight:600;">{sim:.3f} similarity</p>',
-                                unsafe_allow_html=True,
-                            )
-                            thumb_a, thumb_b = st.columns(2)
-                            with thumb_a:
-                                _show_thumb(i, _all_filenames[i])
-                            with thumb_b:
-                                _show_thumb(j, _all_filenames[j])
+                    with col_redundant:
+                        st.markdown("##### 🪞 Most Redundant Pairs")
+                        if not _sim_results["redundant_pairs"]:
+                            st.markdown("Nothing to show yet.")
+                        for i, j, sim in _sim_results["redundant_pairs"]:
+                            with st.container(border=True):
+                                st.markdown(
+                                    f'<p style="color:{_analytics_theme["text"]}; margin:0 0 0.4rem 0; '
+                                    f'font-weight:600;">{sim:.3f} similarity</p>',
+                                    unsafe_allow_html=True,
+                                )
+                                thumb_a, thumb_b = st.columns(2)
+                                with thumb_a:
+                                    _show_thumb(i, _all_filenames[i])
+                                with thumb_b:
+                                    _show_thumb(j, _all_filenames[j])
 
-                with col_unique:
-                    st.markdown("##### 🦄 Most Unique Images")
-                    if not _sim_results["unique_images"]:
-                        st.markdown("Nothing to show yet.")
-                    for idx, avg_sim in _sim_results["unique_images"]:
-                        with st.container(border=True):
-                            st.markdown(
-                                f'<p style="color:{_analytics_theme["text"]}; margin:0 0 0.4rem 0; '
-                                f'font-weight:600;">{avg_sim:.3f} avg. similarity</p>',
-                                unsafe_allow_html=True,
-                            )
-                            _show_thumb(idx, _all_filenames[idx])
+                    with col_unique:
+                        st.markdown("##### 🦄 Most Unique Images")
+                        if not _sim_results["unique_images"]:
+                            st.markdown("Nothing to show yet.")
+                        for idx, avg_sim in _sim_results["unique_images"]:
+                            with st.container(border=True):
+                                st.markdown(
+                                    f'<p style="color:{_analytics_theme["text"]}; margin:0 0 0.4rem 0; '
+                                    f'font-weight:600;">{avg_sim:.3f} avg. similarity</p>',
+                                    unsafe_allow_html=True,
+                                )
+                                _show_thumb(idx, _all_filenames[idx])
 
-                with col_density:
-                    st.markdown("##### 🔥 Collection Hotspots")
-                    if not _sim_results["density_hotspots"]:
-                        st.markdown("Nothing to show yet.")
-                    for idx, neighbor_count in _sim_results["density_hotspots"]:
-                        with st.container(border=True):
-                            st.markdown(
-                                f'<p style="color:{_analytics_theme["text"]}; margin:0 0 0.4rem 0; '
-                                f'font-weight:600;">{neighbor_count} close neighbor'
-                                f'{"s" if neighbor_count != 1 else ""}</p>',
-                                unsafe_allow_html=True,
-                            )
-                            _show_thumb(idx, _all_filenames[idx])
+                    with col_density:
+                        st.markdown("##### 🔥 Collection Hotspots")
+                        if not _sim_results["density_hotspots"]:
+                            st.markdown("Nothing to show yet.")
+                        for idx, neighbor_count in _sim_results["density_hotspots"]:
+                            with st.container(border=True):
+                                st.markdown(
+                                    f'<p style="color:{_analytics_theme["text"]}; margin:0 0 0.4rem 0; '
+                                    f'font-weight:600;">{neighbor_count} close neighbor'
+                                    f'{"s" if neighbor_count != 1 else ""}</p>',
+                                    unsafe_allow_html=True,
+                                )
+                                _show_thumb(idx, _all_filenames[idx])
+
+                st.write("")
+
+                # Cross-Modal Bridge: images CLIP struggles to describe
+                with st.container(border=True):
+                    st.markdown("##### 🌉 Cross-Modal Bridge — Hard-to-Classify Images")
+                    st.markdown(
+                        "Each image is tested against a set of common, everyday text "
+                        "prompts (\"a photo of a person,\" \"a photo of food,\" etc.) and "
+                        "matched to whichever one fits best. Images shown here scored "
+                        "low even on their BEST match — a rough signal for abstract, "
+                        "blurry, or hard-to-classify images your search engine may "
+                        "struggle to ever surface."
+                    )
+                    _bridge_results = compute_cross_modal_scores(
+                        _embeddings, CROSS_MODAL_PROMPTS, top_n=3
+                    )
+                    bridge_cols = st.columns(3)
+                    for col, (idx, best_prompt, best_score) in zip(bridge_cols, _bridge_results):
+                        with col:
+                            with st.container(border=True):
+                                st.markdown(
+                                    f'<p style="color:{_analytics_theme["text"]}; margin:0 0 0.4rem 0; '
+                                    f'font-weight:600;">{best_score:.3f} best match</p>',
+                                    unsafe_allow_html=True,
+                                )
+                                _show_thumb(idx, _all_filenames[idx])
+                                st.markdown(
+                                    f'<p style="color:{_analytics_theme["text"]}; margin:0.3rem 0 0 0; '
+                                    f'font-size:0.75rem; opacity:0.75; text-align:center;">'
+                                    f'closest label: "{best_prompt}"</p>',
+                                    unsafe_allow_html=True,
+                                )
