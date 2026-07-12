@@ -169,6 +169,70 @@ python main.py --mode search --query "a photo of a cat" --top_k 10
 
 ---
 
+## ✨ Features
+
+### 🔎 Search
+
+* **Text-to-image search** — describe what you're looking for in plain
+  English (e.g. *"a photo of a cat"*) and get back the most semantically
+  similar images in your index, powered by CLIP's shared text/image
+  embedding space.
+* **Reverse image search** — upload an image instead of typing a query, and
+  find the most visually/semantically similar images already indexed.
+  Toggle between text and image search modes from the same tab.
+* **Adjustable result count** — control how many results come back via the
+  "Results to show" slider in the sidebar.
+* Results stay on screen across unrelated UI interactions (like switching
+  dark/light mode) instead of disappearing until you search again.
+
+### 📥 Index Images
+
+* Point the app at any local folder and index every supported image
+  (`.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`) into ChromaDB.
+* **Re-indexing is always safe** — already-indexed images are detected and
+  skipped, and re-adding an existing image updates it in place rather than
+  creating a duplicate.
+* Live preview of how many supported images are sitting in the target
+  folder before you commit to indexing.
+* Progress bar with per-image status during indexing.
+
+### 📊 Analytics
+
+* **Dashboard stats** — total images indexed, index location, and model at
+  a glance.
+* **File Types** — bar chart breakdown of your collection by file extension.
+* **How CLIP Sees Your Images** — a t-SNE projection of every image's
+  512-dimensional CLIP embedding down to 2D, so you can visually see which
+  images CLIP considers similar (they'll cluster together).
+* **🧬 Vector Metadata Analysis** — a deeper pairwise similarity sweep
+  across your whole index:
+  * **Most Redundant Pairs** — near-duplicate images worth cleaning up.
+  * **Most Unique Images** — outliers that look unlike anything else in
+    the collection.
+  * **Semantic Range** — a single number for how focused vs. diverse your
+    collection is overall, based on distance from the collection's average
+    vector (its "centroid").
+  * **Collection Density (Hotspots)** — the "cluster centers" of your
+    collection — images with the most close neighbors — surfacing your
+    collection's dominant theme(s) at a glance.
+  * **Cross-Modal Bridge** — flags images CLIP can't confidently describe
+    with any common, everyday label (tested against prompts like *"a photo
+    of a person"* or *"a photo of food"*), acting as a rough quality-control
+    filter for abstract, blurry, or hard-to-classify images.
+
+### ⚙️ Settings & general
+
+* **Dark / light mode** — fully themed, including charts, borders, buttons,
+  and file uploader — not just a background swap.
+* Configurable index directory and image folder, both editable from the
+  sidebar without touching code.
+* **Runs entirely locally** — CLIP inference and ChromaDB storage both stay
+  on your machine; no cloud calls, no external API keys.
+* **Persistent index** — built on ChromaDB's `PersistentClient`, so your
+  index survives closing and reopening the app.
+
+---
+
 ## Troubleshooting (All issues encountered):
 
 ---
