@@ -535,15 +535,34 @@ pytest tests/ -v
 ```
 
 The suite includes tests covering:
-- Device detection (CUDA / MPS / CPU fallback)
-- Text & image embedding shape, normalization, and dtype
-- Cross-modal compatibility (text/image vectors sharing the same space)
-- *ChromaDB* ID generation and determinism
-- Embedding validation and dimension mismatch handling
-- Upsert idempotency (re-indexing same image never creates duplicates)
-- Batch insertion and length mismatch handling
-- Similarity search correctness and self-similarity
-- Collection reset behavior
+
+* Device detection (CUDA / MPS / CPU fallback)
+* Text & image embedding shape, normalization, and dtype
+* Cross-modal compatibility (text/image vectors sharing the same space)
+* Cross-modal semantic correctness (a text prompt scores higher against its
+  matching image than a mismatched one — catches a silently swapped or
+  garbage-but-right-shaped encoder, which shape/dtype tests alone would miss)
+* Embedding determinism (identical input always produces identical output)
+* Non-RGB image handling (grayscale, RGBA, etc. converted to RGB correctly)
+* Long-text truncation (inputs beyond CLIP's 77-token limit)
+* Empty-string input handling
+* Model weight placement (confirms `.to(device)` actually took effect, not
+  just self-reported)
+* ChromaDB ID generation and determinism
+* Embedding validation and dimension mismatch handling
+* Upsert idempotency, for both single `add()` and batch `add_batch()`
+  (re-indexing never creates duplicates)
+* Batch insertion, empty-batch, and length-mismatch handling
+* Batch insertion without metadata (`metadatas=None`)
+* Similarity search correctness, self-similarity, `top_k` limits (including
+  requesting more results than exist), and metadata filtering
+* Bulk embedding retrieval (`collection.get(include=["embeddings"])`)
+  round-trip fidelity — what the Analytics tab's Vector Metadata Analysis
+  depends on entirely
+* Persistence across reconnects (closing and reopening the app doesn't
+  lose the index) and collection isolation by name
+* Collection reset behavior
+* Random ID generation and uniqueness
 
 All tests use temporary directories and generated data. The real `./index` folder
 and `./data/images/` are never touched during testing.
