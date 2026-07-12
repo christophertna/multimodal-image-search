@@ -416,3 +416,40 @@ def test_random_id_is_unique_across_calls():
     since it exists specifically for cases with no stable path to hash."""
     ids = {VectorIndexer._random_id() for _ in range(100)}
     assert len(ids) == 100, "Every call should produce a distinct ID"
+
+
+# collection.get(include=["embeddings"]) round-trip:
+# entire Analytics tab depends completely on this bulk-retrieval path returning the correct stored vectors.
+# it never calls search(), just fetches everything at once for the cosine-matri math
+def test_get_with_include_embeddings_returns_stored_vector(temp_indexer):
+    """collection.get(include=["embeddings"]) should return the EXACT
+    vector that was originally stored, not just count/metadata."""
+    embedding = make_random_embedding()
+    temp_indexer.add(embedding, "./data/images/cat.jpg")
+
+    stored = temp_indexer.collection.get(include=["embeddings", "metadatas"])
+
+    assert len(stored["embeddings"]) == 1
+    # ChromaDB returns embeddings as float64 on retrieval, even though the
+    # original tensor was float32 — cast before comparing, or
+    # torch.allclose() raises a dtype mismatch error instead of comparing
+    retrieved_vector = torch.tensor(stored["embeddings"][0], dtype=torch.float32)
+    assert torch.allclose(retrieved_vector, embedding, atol=1e-5), \
+        "Retrieved embedding should match what was originally stored"
+
+
+def test_get_with_include_embeddings_returns_all_vectors(temp_indexer):
+    """Same round-trip check but for multiple stored images — the
+    Analytics tab always fetches ALL embeddings in one call, not one at a
+    time, so bulk retrieval needs to preserve count and dimensionality
+    correctly across every stored item."""
+    embeddings = [make_random_embedding() for _ in range(5)]
+    paths = [f"./data/images/img_{i}.jpg" for i in range(5)]
+    temp_indexer.add_batch(embeddings, paths)
+
+    stored = temp_indexer.collection.get(include=["embeddings", "metadatas"])
+
+    assert len(stored["embeddings"]) == 5
+    assert len(stored["metadatas"]) == 5
+    assert all(len(vec) == EMBEDDING_DIM for vec in stored["embeddings"]), \
+        "Every retrieved embedding should still be a valid 512-dim vector"
