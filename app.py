@@ -791,6 +791,56 @@ def run_reverse_image_search(
     st.session_state["last_search_label"] = "similar to your uploaded image"
 
 
+def run_surprise_me(top_k: int, indexer: VectorIndexer) -> None:
+    """
+    Pick a random already-indexed image and show images similar to it — a
+    fun way to explore a large collection without having to think of a
+    query yourself.
+
+    Deliberately doesn't need embedder.py at all: the randomly picked
+    image's own embedding is ALREADY sitting in ChromaDB (computed back
+    when it was indexed), so this just reuses that exact vector as the
+    query for indexer.search() rather than re-embedding anything.
+
+    indexer.search()'s validation (_validate_embedding in indexer.py)
+    expects something with .ndim/.shape/.tolist() — a torch.Tensor when
+    called from run_search()/run_reverse_image_search() — but
+    collection.get() hands back plain Python lists, which don't have
+    those attributes. Wrapping in a numpy array satisfies the same duck
+    typing without needing to import torch into app.py just for this.
+
+    Takes in:
+
+        top_k:    Number of results to display
+
+        indexer:  Connected VectorIndexer instance
+    """
+    if indexer.count() == 0:
+        st.warning("Your index is empty. Go to the **Index Images** tab and index a folder first.")
+        return
+
+    import random
+    import numpy as np
+
+    with st.spinner("Picking something interesting..."):
+        all_data = indexer.collection.get(include=["embeddings", "metadatas"])
+        ids = all_data["ids"]
+
+        if not ids:
+            st.warning("Your index is empty. Go to the **Index Images** tab and index a folder first.")
+            return
+
+        random_position = random.randrange(len(ids))
+        query_vector = np.array(all_data["embeddings"][random_position])
+        picked_meta = all_data["metadatas"][random_position]
+        picked_filename = picked_meta.get("filename") or Path(picked_meta.get("image_path", "?")).name
+
+        results = indexer.search(query_vector, top_k=top_k)
+
+    st.session_state["last_search_results"] = results
+    st.session_state["last_search_label"] = f'similar to a random pick — **{picked_filename}**'
+
+
 
 # Page config & layout
 # st.set_page_config() must be the 1st Streamlit call in the script 
@@ -876,6 +926,31 @@ with st.sidebar:
     except Exception as e:
         st.error(f"Could not connect to index: {e}")
 
+    st.write("")
+
+    # Reset Index: indexer.reset() already fully exists in indexer.py —
+    # it was just never exposed anywhere in the UI. Gated behind a
+    # confirmation checkbox since it's a one-click, irreversible action
+    # (wipes the whole collection, per indexer.py's own reset() docstring).
+    with st.expander("⚠️ Danger Zone"):
+        st.markdown(
+            "Permanently deletes every indexed vector. This can't be undone — "
+            "you'd need to re-index from scratch afterward."
+        )
+        _confirm_reset = st.checkbox("I understand this will delete all indexed data")
+        if st.button("Reset Index", type="secondary", disabled=not _confirm_reset):
+            try:
+                _reset_indexer = load_indexer(index_dir)
+                _reset_indexer.reset()
+                # Stale search results would otherwise still reference
+                # images from the now-wiped index
+                st.session_state.pop("last_search_results", None)
+                st.session_state.pop("last_search_label", None)
+                st.success("Index has been reset.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Could not reset index: {e}")
+
 
 # Quick stats dashboard: gives the page a "home screen" feel right under the title
 # instead of jumping straight into tabs — this is the kind of thing that actually
@@ -911,34 +986,47 @@ with tab_search:
     # Toggle between the existing text-query flow and reverse image search —
     # both ultimately just produce a query vector for indexer.search(), so
     # they share the same result grid (_render_search_results()) below
-    search_mode = st.radio(
-        "Search mode",
-        ["🔎 Text", "🖼️ Image"],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
+    mode_col, surprise_col = st.columns([4, 1])
+    with mode_col:
+        search_mode = st.radio(
+            "Search mode",
+            ["🔎 Text", "🖼️ Image"],
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+    with surprise_col:
+        surprise_clicked = st.button("🎲 Surprise Me", width='stretch')
+
+    if surprise_clicked:
+        indexer = load_indexer(index_dir)
+        run_surprise_me(top_k, indexer)
 
     if search_mode == "🔎 Text":
-        # Put the input and button on one row so "search" reads as a single, clean action
-        # rather than a stacked form — a small but noticeable modernization
-        col_query, col_button = st.columns([5, 1], vertical_alignment="bottom")
+        # Wrapped in st.form() specifically so pressing Enter in the text
+        # input submits the search — a plain st.text_input() + st.button()
+        # (the previous approach) does NOT do this; Enter just updates the
+        # input's value and reruns the script without the button itself
+        # ever reporting as clicked. st.form_submit_button() takes the same
+        # type/width arguments as a regular st.button().
+        with st.form(key="text_search_form"):
+            # Put the input and button on one row so "search" reads as a single, clean action
+            # rather than a stacked form — a small but noticeable modernization
+            col_query, col_button = st.columns([5, 1], vertical_alignment="bottom")
 
-        with col_query:
-            query = st.text_input(
-                "Search your images",
-                placeholder="ex: a photo of a cat",
-                label_visibility="collapsed",
-            )
+            with col_query:
+                query = st.text_input(
+                    "Search your images",
+                    placeholder="ex: a photo of a cat",
+                    label_visibility="collapsed",
+                )
 
-        with col_button:
-            search_clicked = st.button("Search", type="primary", width='stretch')
+            with col_button:
+                search_clicked = st.form_submit_button("Search", type="primary", width='stretch')
 
         st.write("")
 
-        # st.button() returns True only on the re-run triggered by a click
-
-        # Also trigger search if user presses Enter in the text input
-        # by checking if `query` is non-empty and the button was clicked
+        # search_clicked is True on the rerun triggered by either clicking
+        # the button OR pressing Enter inside the form — both submit it
         if search_clicked and query.strip():
             embedder = load_embedder()
             indexer  = load_indexer(index_dir)
@@ -1046,7 +1134,7 @@ with tab_index:
                 # Used here so the sidebar metric updates right after indexing completes
                 st.rerun()  
 
-# Analytics tab
+# --- Analytics tab ---
 with tab_analytics:
     st.write("")
     _analytics_theme = DARK_THEME if dark_mode else LIGHT_THEME
@@ -1076,7 +1164,7 @@ with tab_analytics:
         _metadatas  = _all_data.get("metadatas", [])
         _embeddings = _all_data.get("embeddings", [])
 
-        # Stat cards: total indexed + total storage on disk 
+        # --- Stat cards: total indexed + total storage on disk ---
         # Storage is measured from the actual files in data_dir (not the
         # vectors themselves, which are tiny) so it reflects the real
         # disk footprint of the image collection being indexed
@@ -1133,7 +1221,7 @@ with tab_analytics:
                 )
             )
 
-        # File extension breakdown (bar chart) 
+        # --- File extension breakdown (bar chart) ---
         with st.container(border=True):
             st.markdown("#### 🗃️ File Types")
             _ext_counts: dict = {}
@@ -1158,7 +1246,7 @@ with tab_analytics:
 
         st.write("")
 
-        # t-SNE 2D projection of the CLIP embeddings
+        # --- t-SNE 2D projection of the CLIP embeddings ---
         with st.container(border=True):
             st.markdown("#### 🧠 How CLIP Sees Your Images")
             st.markdown(
@@ -1187,7 +1275,7 @@ with tab_analytics:
                         "type": _exts,
                     })
 
-                    # Height dropped from 420 to 280, container was
+                    # Height dropped from 420 to 280 — the container was
                     # noticeably oversized for what it actually shows
                     _scatter = _themed(
                         alt.Chart(_proj_df)
@@ -1210,7 +1298,7 @@ with tab_analytics:
 
         st.write("")
 
-        # Vector metadata analysis: redundant pairs + outliers 
+        # --- Vector metadata analysis: redundant pairs + outliers ---
         with st.container(border=True):
             st.markdown("#### 🧬 Vector Metadata Analysis")
             st.markdown(
@@ -1221,7 +1309,7 @@ with tab_analytics:
                 "the whole collection is overall."
             )
 
-            # O(n²) memory/compute, trivial for a personal collection of a
+            # O(n²) memory/compute — trivial for a personal collection of a
             # few thousand images (numpy handles this in well under a
             # second), but a full similarity matrix for tens of thousands of
             # images would start to use real memory, so this is capped
@@ -1250,9 +1338,9 @@ with tab_analytics:
                 _all_filenames = [_get_filename(m) for m in _metadatas]
                 _all_paths = [m.get("image_path", "") for m in _metadatas]
 
-                # Semantic Range: a single number for how focused vs.
+                # --- Semantic Range: a single number for how focused vs.
                 # diverse the WHOLE collection is (as opposed to the other
-                # analyses below, which are all about specific images)
+                # analyses below, which are all about specific images) ---
                 _srange = _sim_results["semantic_range"]
                 st.write("")
                 with st.container(border=True):
@@ -1346,7 +1434,7 @@ with tab_analytics:
 
                 st.write("")
 
-                # Cross-Modal Bridge: images CLIP struggles to describe
+                # --- Cross-Modal Bridge: images CLIP struggles to describe ---
                 with st.container(border=True):
                     st.markdown("##### 🌉 Cross-Modal Bridge — Hard-to-Classify Images")
                     st.markdown(
