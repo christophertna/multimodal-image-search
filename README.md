@@ -173,7 +173,7 @@ python main.py --mode search --query "a photo of a cat" --top_k 10
 
 ### 🔎 Search
 
-* **Text-to-image search**:describe what you're looking for in plain
+* **Text-to-image search**: describe what you're looking for in plain
   English (e.g. *"a photo of a cat"*) and get back the most semantically
   similar images in your index, powered by CLIP's shared text/image
   embedding space.
@@ -226,7 +226,7 @@ python main.py --mode search --query "a photo of a cat" --top_k 10
   and file uploader, not just a background swap.
 * Configurable index directory and image folder, both editable from the
   sidebar without touching code.
-* **Runs entirely locally** : *CLIP* inference and *ChromaDB* storage both stay
+* **Runs entirely locally**: *CLIP* inference and *ChromaDB* storage both stay
   on your machine, no cloud calls, no external API keys.
 * **Persistent index**: built on *ChromaDB*'s `PersistentClient`, so your
   index survives closing and reopening the app.
