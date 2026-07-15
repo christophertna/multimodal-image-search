@@ -39,7 +39,7 @@ my_project/
 ## Setup & Installation
 
 ### Prerequisites
-- Python 3.12 (not 3.13 — see Troubleshooting)
+- Python 3.12 (not 3.13, see Troubleshooting)
 - NVIDIA GPU with CUDA support (optional but recommended)
 - Git
 
@@ -173,14 +173,14 @@ python main.py --mode search --query "a photo of a cat" --top_k 10
 
 ### 🔎 Search
 
-* **Text-to-image search** — describe what you're looking for in plain
+* **Text-to-image search**:describe what you're looking for in plain
   English (e.g. *"a photo of a cat"*) and get back the most semantically
   similar images in your index, powered by CLIP's shared text/image
   embedding space.
-* **Reverse image search** — upload an image instead of typing a query, and
+* **Reverse image search**: upload an image instead of typing a query, and
   find the most visually/semantically similar images already indexed.
   Toggle between text and image search modes from the same tab.
-* **Adjustable result count** — control how many results come back via the
+* **Adjustable result count**: control how many results come back via the
   "Results to show" slider in the sidebar.
 * Results stay on screen across unrelated UI interactions (like switching
   dark/light mode) instead of disappearing until you search again.
@@ -189,7 +189,7 @@ python main.py --mode search --query "a photo of a cat" --top_k 10
 
 * Point the app at any local folder and index every supported image
   (`.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`) into ChromaDB.
-* **Re-indexing is always safe** — already-indexed images are detected and
+* **Re-indexing is always safe**: already-indexed images are detected and
   skipped, and re-adding an existing image updates it in place rather than
   creating a duplicate.
 * Live preview of how many supported images are sitting in the target
@@ -198,37 +198,37 @@ python main.py --mode search --query "a photo of a cat" --top_k 10
 
 ### 📊 Analytics
 
-* **Dashboard stats** — total images indexed, index location, and model at
+* **Dashboard stats**: total images indexed, index location, and model at
   a glance.
-* **File Types** — bar chart breakdown of your collection by file extension.
-* **How CLIP Sees Your Images** — a t-SNE projection of every image's
+* **File Types**: bar chart breakdown of your collection by file extension.
+* **How CLIP Sees Your Images**: t-SNE projection of every image's
   512-dimensional CLIP embedding down to 2D, so you can visually see which
   images CLIP considers similar (they'll cluster together).
-* **🧬 Vector Metadata Analysis** — a deeper pairwise similarity sweep
+* **🧬 Vector Metadata Analysis**: a deeper pairwise similarity sweep
   across your whole index:
-  * **Most Redundant Pairs** — near-duplicate images worth cleaning up.
-  * **Most Unique Images** — outliers that look unlike anything else in
+  * **Most Redundant Pairs**: near-duplicate images worth cleaning up.
+  * **Most Unique Images**: outliers that look unlike anything else in
     the collection.
-  * **Semantic Range** — a single number for how focused vs. diverse your
+  * **Semantic Range**: single number for how focused vs. diverse your
     collection is overall, based on distance from the collection's average
     vector (its "centroid").
-  * **Collection Density (Hotspots)** — the "cluster centers" of your
-    collection — images with the most close neighbors — surfacing your
-    collection's dominant theme(s) at a glance.
-  * **Cross-Modal Bridge** — flags images CLIP can't confidently describe
+  * **Collection Density (Hotspots)**: the cluster areas of your
+    collection, images with the most close neighbors surfacing your
+    collection's dominant themes.
+  * **Cross-Modal Bridge**: flags images CLIP cant confidently describe
     with any common, everyday label (tested against prompts like *"a photo
-    of a person"* or *"a photo of food"*), acting as a rough quality-control
-    filter for abstract, blurry, or hard-to-classify images.
+    of a person"*), acting as a rough quality-control
+    filter for abstract and blurry images.
 
 ### ⚙️ Settings & general
 
-* **Dark / light mode** — fully themed, including charts, borders, buttons,
-  and file uploader — not just a background swap.
+* **Dark / Light mode**: fully themed, including charts, borders, buttons,
+  and file uploader, not just a background swap.
 * Configurable index directory and image folder, both editable from the
   sidebar without touching code.
-* **Runs entirely locally** — CLIP inference and ChromaDB storage both stay
-  on your machine; no cloud calls, no external API keys.
-* **Persistent index** — built on ChromaDB's `PersistentClient`, so your
+* **Runs entirely locally** : *CLIP* inference and *ChromaDB* storage both stay
+  on your machine, no cloud calls, no external API keys.
+* **Persistent index**: built on *ChromaDB*'s `PersistentClient`, so your
   index survives closing and reopening the app.
 
 ---
@@ -455,7 +455,7 @@ http://localhost:8501
 2. Click **Start Indexing**
 3. Wait for the process to complete
 
-> **Note:** The first run will download the CLIP model (~350MB) inside the container. <br>
+> **Note:** The first run will download the *CLIP* model (~350MB) inside the container. <br>
 > (This only happens once so its cached in the container image afterward)
 
 ---
@@ -604,7 +604,7 @@ The suite includes tests covering:
 * Text & image embedding shape, normalization, and dtype
 * Cross-modal compatibility (text/image vectors sharing the same space)
 * Cross-modal semantic correctness (a text prompt scores higher against its
-  matching image than a mismatched one — catches a silently swapped or
+  matching image than a mismatched one, catches a silently swapped or
   garbage-but-right-shaped encoder, which shape/dtype tests alone would miss)
 * Embedding determinism (identical input always produces identical output)
 * Non-RGB image handling (grayscale, RGBA, etc. converted to RGB correctly)
@@ -612,7 +612,7 @@ The suite includes tests covering:
 * Empty-string input handling
 * Model weight placement (confirms `.to(device)` actually took effect, not
   just self-reported)
-* ChromaDB ID generation and determinism
+* *ChromaDB* ID generation and determinism
 * Embedding validation and dimension mismatch handling
 * Upsert idempotency, for both single `add()` and batch `add_batch()`
   (re-indexing never creates duplicates)
@@ -621,8 +621,8 @@ The suite includes tests covering:
 * Similarity search correctness, self-similarity, `top_k` limits (including
   requesting more results than exist), and metadata filtering
 * Bulk embedding retrieval (`collection.get(include=["embeddings"])`)
-  round-trip fidelity — what the Analytics tab's Vector Metadata Analysis
-  depends on entirely
+  round-trip fidelity (what the Analytics tab's Vector Metadata Analysis
+  depends on entirely)
 * Persistence across reconnects (closing and reopening the app doesn't
   lose the index) and collection isolation by name
 * Collection reset behavior
