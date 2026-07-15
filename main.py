@@ -11,10 +11,10 @@ Usage:
     # Search and return more results:
     python main.py --mode search --query "sunset over mountains" --top_k 10
 
-    # Reverse image search: find images similar to a QUERY IMAGE:
+    # Reverse image search — find images similar to a QUERY IMAGE:
     python main.py --mode reverse_search --image_path ./query.jpg
 
-    # Surprise me: search using a randomly picked already-indexed image:
+    # Surprise me — search using a randomly picked already-indexed image:
     python main.py --mode surprise
 
     # Wipe the entire index:
