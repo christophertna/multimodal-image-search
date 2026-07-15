@@ -453,3 +453,31 @@ def test_get_with_include_embeddings_returns_all_vectors(temp_indexer):
     assert len(stored["metadatas"]) == 5
     assert all(len(vec) == EMBEDDING_DIM for vec in stored["embeddings"]), \
         "Every retrieved embedding should still be a valid 512-dim vector"
+
+
+# Surprise Me: numpy array as a query vector not just torch.Tensor 
+def test_search_accepts_numpy_array_query_vector(temp_indexer):
+    """
+    search()'s _validate_embedding() duck-types on .ndim/.shape/.tolist()
+    rather than requiring a literal torch.Tensor — every existing search
+    test above passes a torch.Tensor, so this was never actually verified
+    with a different object type. app.py's "Surprise Me" feature relies on
+    exactly this: it wraps a plain list (returned by
+    collection.get(include=["embeddings"])) in a numpy array rather than
+    converting back to a torch.Tensor before calling search().
+    """
+    import numpy as np
+
+    embedding = make_random_embedding()
+    path = "./data/images/cat.jpg"
+    temp_indexer.add(embedding, path)
+
+    # Simulate exactly what "Surprise Me" does: retrieve the embedding via
+    # collection.get() (a plain Python list) and wrap it in numpy not torch
+    stored = temp_indexer.collection.get(include=["embeddings"])
+    query_vector = np.array(stored["embeddings"][0])
+
+    results = temp_indexer.search(query_vector, top_k=1)
+
+    assert results[0]["image_path"] == path, \
+        "Searching with a numpy-wrapped embedding retrieved from collection.get() should find that same image as the top match"
